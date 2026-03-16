@@ -1,0 +1,547 @@
+# -*- fill-column: 69; -*-
+# vim: set textwidth=69
+# Do: title, toc:table-of-contents ::fixed-width-sections |tables
+# Do: ^:sup/sub with curly -:special-strings *:emphasis
+# Don't: prop:no-prop-drawers \n:preserve-linebreaks ':use-smart-quotes
+#+OPTIONS: prop:nil title:t toc:t \n:nil ::t |:t ^:{} -:t *:t ':nil
+
+#+RFC_CATEGORY: std
+#+RFC_NAME: draft-antony-ipsecme-udp-encap-multiport
+#+RFC_VERSION: 00
+#+RFC_IPR: trust200902
+#+RFC_STREAM: IETF
+#+RFC_XML_VERSION: 3
+#+RFC_CONSENSUS: true
+#+RFC_UPDATES: 3948 7296
+
+#+TITLE: Multiple UDP Source Ports for ESP in UDP Encapsulation
+#+RFC_SHORT_TITLE: ESP-in-UDP Multiple Source Ports
+#+AUTHOR: Antony Antony
+#+EMAIL: antony.antony@secunet.com
+#+AFFILIATION: secunet Security Networks AG
+#+RFC_SHORT_ORG: secunet
+#+RFC_AREA: SEC
+#+RFC_ADD_AUTHOR: ("Steffen Klassert" "steffen.klassert@secunet.com" ("secunet" "secunet Security Networks AG"))
+#+RFC_WORKGROUP: IPSECME Working Group
+
+#+begin_abstract
+This document specifies a mechanism to improve network path
+distribution and host receive-queue load distribution for
+IPsec traffic using ESP in UDP encapsulation [[RFC3948]].
+Using the per-resource Child SA mechanism of [[RFC9611]],
+peers negotiate multiple Child SAs each bound to a distinct
+UDP source port.  The resulting variation in UDP source port
+enables receive-side scaling (RSS) and equal-cost multi-path
+(ECMP) load balancing, supporting efficient per-CPU IPsec
+processing.  This document specifies the IKEv2 negotiation,
+NAT traversal behavior, and operational requirements for
+this mechanism.
+#+end_abstract
+
+#+RFC_KEYWORDS: ("IPsec" "ESP" "IKEv2" "UDP encapsulation" "RSS" "ECMP" "per-CPU" "NAT traversal")
+
+* Introduction
+
+In high-speed IPsec deployments, endpoints exchange traffic at
+multi-gigabit rates and must distribute cryptographic processing
+across multiple CPU cores.  ESP in UDP encapsulation [[RFC3948]] is
+widely deployed in cloud environments and across NAT gateways.
+However, when ESP is encapsulated in UDP using port 4500 for both
+source and destination, all traffic between a given pair of peers
+shares a single 4-tuple (src-IP, dst-IP, src-port=4500,
+dst-port=4500).  This eliminates the 4-tuple diversity required for
+effective NIC receive-side scaling (RSS) and ECMP path selection.
+
+This document specifies a mechanism whereby IKEv2 peers establish
+multiple Child Security Associations (SAs), each bound to a distinct
+UDP source port, using the per-resource Child SA mechanism of
+[[RFC9611]].  Each per-resource Child SA is created via a
+CREATE_CHILD_SA exchange sent from a new ephemeral UDP source port.
+The resulting UDP flows, with varying source ports, enable NIC
+hardware and network infrastructure to distribute IPsec traffic
+across RSS queues and ECMP paths.  A Fallback SA on the standard port
+pair (4500 to 4500) is always maintained per [[RFC9611]]. This
+mechanism is defined for ESP [[RFC4303]] in UDP encapsulation
+[[RFC3948]]; its applicability to EESP
+[[I-D.ietf-ipsecme-eesp]][[I-D.ietf-ipsecme-eesp-ikev2]] is discussed
+in [[EESP Considerations]].
+
+Varying the UDP source port without IKEv2 coordination is
+insufficient.  Without a negotiated binding between a UDP source port
+and a specific Child SA, the responder cannot distinguish an
+intentional port change from a NAT remapping event, which would
+trigger IKE SA roaming procedures per [[RFC7296]] Section 2.23.  NAT
+keepalives ([[RFC3948]] Section 6) must be maintained per active port
+pair; without IKEv2 signaling, the IKEd has no record of which port
+pairs exist.  NIC and kernel queue-steering rules require both peers
+to agree on the port-to-resource binding; without negotiation,
+consistent steering configuration across peers is not achievable.
+This document specifies the IKEv2 exchanges and behavioral rules that
+establish deterministic port-to-SA bindings, providing the
+coordination that unilateral port variation cannot.
+
+** Requirements Language
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+"SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+"OPTIONAL" in this document are to be interpreted as described in BCP
+14 [[RFC2119]] [[RFC8174]] when, and only when, they appear in all
+capitals, as shown here.
+
+** Terminology
+
+This document uses the following terms from IKEv2 [[RFC7296]]: Child
+SA, CREATE_CHILD_SA exchange, IKE_AUTH exchange, INFORMATIONAL
+exchange.
+
+This document uses the following terms from [[RFC3948]]:
+UDP-encapsulated ESP, Non-ESP Marker.
+
+This document uses the following terms defined in [[RFC9611]]:
+per-resource Child SA, Resource, SA_RESOURCE_INFO, TS_MAX_QUEUE.
+
+- Fallback SA :: The standard UDP-encapsulated ESP Child SA
+  using UDP source port 4500 and destination port 4500,
+  established during IKE_AUTH.  It remains active for the
+  lifetime of the IKE SA.
+
+- Per-Resource Child SA :: A Child SA established via
+  CREATE_CHILD_SA from an Ephemeral Source Port, bound to
+  that port for data-plane entropy and traffic-steering
+  purposes.  In this document, the resource is a CPU core
+  or NIC receive queue.
+
+- Ephemeral Source Port :: A UDP source port selected by the
+  IKEd for a per-resource Child SA, distinct from port 4500
+  and from the source ports of all other active per-resource
+  Child SAs.
+
+- IKEd :: The IKEv2 implementation on a host responsible for
+  IKE SA and Child SA lifecycle management.
+
+* Problem Statement
+
+ESP in UDP encapsulation [[RFC3948]] deploys ESP packets in UDP with
+source port 4500 and destination port 4500. Because all IPsec traffic
+between two peers shares this single 4-tuple, no port entropy is
+present in the outer UDP header.
+
+Modern NIC hardware uses the outer UDP 4-tuple for RSS queue
+assignment.  Without source port entropy, all IPsec traffic between
+two peers is directed to a single NIC RSS queue and processed by a
+single CPU core, creating a throughput bottleneck even when multiple
+cores are available.
+
+Multi-path networks using ECMP similarly rely on flow 5-tuple entropy
+to spread traffic across links.  A single UDP flow between two peers
+concentrates all traffic on one ECMP path, underutilizing available
+bandwidth.
+
+The IPv6 flow label [[RFC6438]] addresses load distribution for
+tunnel traffic in IPv6 environments.  It does not apply to ESP-in-UDP
+deployments, which are used specifically where NAT traversal is
+required.  NAT devices do not preserve the IPv6 flow label, and many
+such deployments remain on IPv4.
+
+Varying the UDP source port per CPU or per NIC queue resolves both
+problems.  Each per-resource Child SA has a distinct UDP source port,
+providing the entropy needed for RSS and ECMP distribution without
+modifying the inner ESP payload or changing traffic selectors.
+
+* Solution Overview
+
+Two IKEv2 peers first establish a standard IKE SA and a Fallback SA
+using UDP-encapsulated ESP on port 4500.  Both peers signal support
+for this mechanism by including SA_RESOURCE_INFO ([[RFC9611]], see
+[[Capability Announcement]]) in the IKE_AUTH exchange.
+
+When per-resource Child SAs are desired, the initiator sends a
+CREATE_CHILD_SA exchange from a new ephemeral UDP source port,
+including SA_RESOURCE_INFO per [[RFC9611]].  The responder treats the
+resulting Child SA as a per-resource Child SA bound to that port
+tuple.  The responder MUST send the CREATE_CHILD_SA response back to
+the same source port and IP address from which the request was
+received, using its own port 4500 as the source.  All other IKE
+communication continues on the main port pair (4500 to 4500).
+
+The initiator MAY request additional per-resource Child SAs via
+further CREATE_CHILD_SA exchanges.  If the responder is unwilling to
+create more per-resource Child SAs for the Traffic Selector pair, it
+returns TS_MAX_QUEUE per [[RFC9611]].  The Fallback SA remains active
+throughout.
+
+* Updates to RFC3948 and RFC7296
+
+** Update to RFC3948
+
+[[RFC3948]] Section 2.1 requires that the UDP Source Port and
+Destination Port of ESP-in-UDP packets "MUST be the same as that used
+by IKE traffic."
+
+This document updates that requirement as follows.  When two IKEv2
+peers have negotiated per-resource Child SAs using SA_RESOURCE_INFO
+per [[RFC9611]], and the mechanism defined in this document is in
+use, ESP-in-UDP packets belonging to a per-resource Child SA MAY use
+a UDP source port different from the source port used for IKE
+traffic.  The UDP source port for such packets MUST be the Ephemeral
+Source Port bound to that per-resource Child SA as negotiated in
+[[Per-Resource Child SA Negotiation]].
+
+This relaxation applies only to per-resource Child SAs negotiated per
+this document.  The Fallback SA and all other Child SAs MUST continue
+to use the same port as IKE traffic, as required by [[RFC3948]].
+
+** Update to RFC7296
+
+[[RFC7296]] Section 2.23 requires that "The peer MUST also send all
+subsequent IKEv2 traffic on UDP port 4500."
+
+[[RFC7296]] Section 2.11 already requires that a responder MUST
+accept IKEv2 requests regardless of the UDP source port and reply to
+the address and port from which the request was received.  The
+responder-side behavior required by this document therefore needs no
+change to existing implementations.
+
+This document updates the initiator-side requirement of Section 2.23.
+When the mechanism defined in this document is in use,
+CREATE_CHILD_SA exchanges used to negotiate per-resource Child SAs
+MAY be sent from an Ephemeral Source Port other than 4500.  The
+responder MUST reply to the same Ephemeral Source Port from its own
+port 4500.
+
+All other IKEv2 traffic, including INFORMATIONAL exchanges, the IKE
+SA, and all exchanges not related to per-resource Child SA
+negotiation, MUST continue to use port 4500 as required by
+[[RFC7296]].
+
+* Fallback SA
+
+The Fallback SA is the initial Child SA established during the
+IKE_AUTH exchange using UDP source port 4500 and destination port
+4500, following [[RFC3948]] and [[RFC7296]]. It serves the role of
+the shared Child SA described in [[RFC9611]]: a single SA usable by
+all resources while per-resource Child SAs are being negotiated or
+when no per-resource Child SA exists for a given resource.
+
+The Fallback SA MUST remain active for the lifetime of the IKE SA. It
+MUST NOT be deleted while per-resource Child SAs are active.  IKE
+control messages, rekeying exchanges, and deletion messages for
+per-resource Child SAs MUST be sent using the Fallback SA's port pair
+(4500 to 4500).
+
+* Per-Resource Child SA Negotiation
+
+** Capability Announcement
+
+Support for per-resource Child SA creation is signaled by including
+SA_RESOURCE_INFO ([[RFC9611]]) in the IKE_AUTH exchange.  Both peers
+MUST include this notification to enable the mechanism.  If either
+peer omits SA_RESOURCE_INFO from IKE_AUTH, per-resource Child SAs
+MUST NOT be created; both peers MUST use the Fallback SA for all
+traffic.
+
+The SA_RESOURCE_INFO notification MAY carry an optional Resource
+Identifier in its notification data.  When present, this field is
+opaque and intended for debugging purposes only, as defined in
+[[RFC9611]].
+
+** Creating Per-Resource Child SAs
+
+To create a per-resource Child SA, the initiator IKEd opens a new UDP
+socket bound to an Ephemeral Source Port and sends a CREATE_CHILD_SA
+exchange from that port to the responder's port 4500.  The
+CREATE_CHILD_SA exchange MUST include an SA_RESOURCE_INFO
+notification per [[RFC9611]].
+
+The Ephemeral Source Port MUST be selected from the dynamic port
+range (49152-65535) per [[RFC6056]] and MUST NOT be a well-known port
+(0-1023).  The port MUST be distinct from port 4500 and from the
+source ports of all currently active per-resource Child SAs.  The
+port SHOULD be selected randomly within the dynamic range per
+[[RFC6056]].  Because the port value is exchanged in the IKE
+handshake and bound to an SA known to both peers, randomization does
+not provide confidentiality; it prevents predictable allocation
+patterns that expose implementation state.
+
+The IKEd MUST retain the socket binding to the Ephemeral Source Port
+for the lifetime of the SA, preventing the operating system from
+assigning that port to other applications.
+
+The initiator SHOULD create one per-resource Child SA per CPU core or
+NIC receive queue available for IPsec processing, up to the limit
+indicated by TS_MAX_QUEUE ([[RFC9611]]).  Creating additional
+per-resource Child SAs beyond available resources provides no benefit
+and increases IKE state on both peers.
+
+** Responder Behavior
+
+Upon receiving a CREATE_CHILD_SA containing SA_RESOURCE_INFO from a
+new UDP source port, and having exchanged SA_RESOURCE_INFO in
+IKE_AUTH, the responder MUST:
+
+1. Respond to the initiator's Ephemeral Source Port from
+   its own port 4500.
+
+2. Install the Child SA with the IP and port tuple
+   (initiator-IP, responder-IP, Ephemeral-Source-Port,
+   4500) as the UDP binding.
+
+3. NOT update the IKE SA's IP address or port based on
+   this message.  Per-resource Child SA creation from a new
+   source port MUST NOT be interpreted as IKE SA roaming or
+   NAT mapping change.
+
+** Path Validation
+
+Completion of the CREATE_CHILD_SA exchange does not establish that
+the data path for a per-resource Child SA is viable. A NAT gateway
+may silently drop ESP traffic on the new port pair even when the IKE
+exchange succeeded.  Forwarding traffic on an unconfirmed path will
+result in blackholing.
+
+The responder MUST install only the inbound SA upon completing the
+CREATE_CHILD_SA exchange.  Installation of the outbound SA MUST be
+deferred until data-plane reachability is confirmed.
+
+Data-plane reachability is confirmed when the responder receives the
+first ESP packet on the new inbound SA.  The SAD MAY enforce a soft
+limit of one incoming packet on the inbound SA; when this limit
+triggers, the kernel signals the IKEd (e.g., via an XFRM acquire
+event), which then installs the outbound SA.
+
+Alternatively, the initiator MAY send an encrypted ESP ping
+([[I-D.ietf-ipsecme-encrypted-esp-ping]]) immediately after the
+CREATE_CHILD_SA exchange completes, providing explicit confirmation
+of data-plane reachability to the responder.
+
+Until the outbound SA is installed, the responder MUST use the
+Fallback SA for traffic destined to the initiator.
+
+** NIC Queue Steering
+
+When a per-resource Child SA is established, each peer programs its
+NIC or kernel packet classifier to steer incoming ESP traffic for
+that UDP port pair to the target CPU or queue.
+
+Because the same Ephemeral Source Port appears in different header
+fields on each side, the steering rules are asymmetric:
+
+- On the initiator: incoming ESP traffic from the responder
+  arrives with dst-port = Ephemeral-Source-Port.
+  Steer on dst-port = Ephemeral-Source-Port.
+
+- On the responder: incoming ESP traffic from the initiator
+  arrives with src-port = Ephemeral-Source-Port.
+  Steer on src-port = Ephemeral-Source-Port.
+
+Example using ethtool ntuple rules, where the Ephemeral Source Port
+is 50001 and queue index is 20:
+
+#+caption: NIC Steering Rules (Ephemeral Source Port 50001)
+#+begin_src
+  On initiator:
+    ethtool --config-ntuple eth0 flow-type udp4 \
+      src-port 4500 dst-port 50001 action 20
+
+  On responder:
+    ethtool --config-ntuple eth0 flow-type udp4 \
+      src-port 50001 dst-port 4500 action 20
+#+end_src
+
+* NAT Traversal Considerations
+
+** Initiator Behind NAT
+
+When the initiator A is behind a NAT gateway N, and A creates a
+per-resource Child SA from Ephemeral Source Port P:
+
+#+caption: Initiator-Behind-NAT Port Mapping
+#+begin_src
+  A:P --> NAT --> N:Q --> B:4500   (initiator to responder)
+  B:4500 --> N:Q --> A:P           (responder to initiator)
+#+end_src
+
+The NAT gateway creates a new mapping for source port P, translating
+it to external port Q.  The responder B receives CREATE_CHILD_SA from
+N:Q and responds to N:Q. The per-resource Child SA's port binding at
+the responder is (N:Q, B:4500).  No special handling is required; the
+standard procedure of [[Creating Per-Resource Child SAs]] applies.
+
+** No NAT
+
+When there is no NAT between peers, per-resource Child SA creation
+proceeds as described in [[Creating Per-Resource Child SAs]]. IP and
+port tuples are used directly for NIC steering and SAD lookups.
+
+The source and destination ports are symmetric in the ESP flow, as
+illustrated for Ephemeral Source Port 50001:
+
+#+caption: Port Tuples without NAT
+#+begin_src
+  A:50001 --> B:4500   (A to B ESP traffic)
+  B:4500  --> A:50001  (B to A ESP traffic)
+#+end_src
+
+** Bidirectional NAT
+
+Some NAT deployments (e.g., certain cloud environments) allow mapping
+creation from either direction.  In such environments, the responder
+MAY initiate per-resource Child SA creation using its own Ephemeral
+Source Port, with the NAT gateway creating the necessary mapping. The
+procedure is identical to the initiator case and no special handling
+is required.
+
+** Responder-Initiated SA Blocked by NAT
+
+When the responder B initiates a per-resource Child SA from a new
+Ephemeral Source Port and the NAT gateway does not support mapping
+creation in the B-to-A direction, the CREATE_CHILD_SA request is
+silently dropped.  After retransmission attempts are exhausted per
+[[RFC7296]] Section 2.1, B MUST abandon the attempt.
+
+A dropped CREATE_CHILD_SA leaves the IKE Message ID sequence in an
+inconsistent state.  B MUST recover by sending an INFORMATIONAL
+exchange over the main IKE SA (UDP port 4500 to 4500), containing
+both an IKEV2_MESSAGE_ID_SYNC notification ([[RFC6311]] Section 5.1)
+and a Delete payload ([[RFC7296]] Section 3.11) carrying the SPI that
+B proposed in the failed CREATE_CHILD_SA.
+
+#+caption: INFORMATIONAL for Abandoned Per-Resource Child SA
+#+begin_src
+  INF( N(IKEV2_MESSAGE_ID_SYNC),
+       D(ESP, SPI) )
+#+end_src
+
+Multiple SPIs MAY be carried in a single Delete payload when several
+per-resource Child SA attempts are abandoned.
+
+On receiving this INFORMATIONAL, A processes IKEV2_MESSAGE_ID_SYNC
+per [[RFC6311]] and processes the Delete payload per [[RFC7296]]
+Section 3.11.  If A has installed a Child SA for the indicated SPI, A
+MUST delete it.  If the SPI is unknown to A, A silently ignores it
+per [[RFC7296]] Section 3.11.
+
+B MUST be prepared to receive a delayed CREATE_CHILD_SA response even
+after sending this INFORMATIONAL.  If such a response arrives and B
+installs the Child SA, B MUST delete it immediately.
+
+B MAY retry per-resource Child SA creation from a different Ephemeral
+Source Port, as individual ports may be selectively blocked by NAT
+policy.  B SHOULD cease responder-initiated per-resource Child SA
+creation after repeated consecutive failures and rely on A to create
+additional per-resource Child SAs.
+
+* Operational Considerations
+
+** NAT Keepalives
+
+When NAT traversal keepalives are required ([[RFC3948]] Section 6), a
+one-byte NAT keepalive packet MUST be sent for every active UDP
+source and destination port pair, not only for the Fallback SA's port
+pair (4500 to 4500).
+
+If N per-resource Child SAs and one Fallback SA are active, N+1
+independent keepalive flows MUST be maintained, one per unique
+(src-IP, dst-IP, src-port, dst-port) tuple.
+
+** Dead Peer Detection and Liveness
+
+Liveness checking MAY be performed per per-resource Child SA port
+pair, or only on the Fallback SA port pair (4500 to 4500), as a local
+policy choice.
+
+If a liveness failure is detected on a per-resource Child SA path,
+only that SA and its associated port pair SHOULD be considered
+failed.  The IKEd SHOULD delete the failed per-resource Child SA and
+MAY create a replacement.
+
+If a liveness failure is detected on the Fallback SA, all
+per-resource Child SAs associated with the same IKE SA SHOULD be
+considered failed, and the IKE SA teardown procedure ([[RFC7296]]
+Section 1.4) applies.
+
+** Child SA Rekeying
+
+Rekeying of per-resource Child SAs MUST be initiated via the main IKE
+SA, using port pair 4500 to 4500.  This ensures rekeying messages are
+not affected by per-resource Child SA path failures.
+
+The rekeyed Child SA MUST reuse the same Ephemeral Source Port as the
+SA being rekeyed, preserving the UDP binding and NIC queue steering
+configuration.
+
+** Deletion
+
+Delete exchanges for per-resource Child SAs MUST be sent via the main
+IKE SA port pair (4500 to 4500), ensuring delivery even when the
+per-resource Child SA path is no longer viable.
+
+* EESP Considerations
+
+This mechanism applies equally to EESP
+[[I-D.ietf-ipsecme-eesp]][[I-D.ietf-ipsecme-eesp-ikev2]] when Sub SAs
+are not in use.  Each per-resource Child SA is a separate EESP Child
+SA with its own SPI negotiated via CREATE_CHILD_SA, and [[RFC9611]]
+applies identically to the ESP case.
+
+When EESP Sub SAs are in use (an SSKDF transform is negotiated), the
+mechanism defined in this document does not apply.  Sub SAs are
+derived from a parent EESP SA and have no independent SPIs or IKEv2
+lifecycle; they do not participate in CREATE_CHILD_SA exchanges and
+cannot be bound to an Ephemeral Source Port.
+
+* IANA Considerations
+
+This document makes no requests of IANA.
+
+* Security Considerations
+
+Per-resource Child SAs have independent key material, inheriting the
+security properties of ESP-in-UDP [[RFC3948]].  The Ephemeral Source
+Port provides entropy in the outer UDP header but carries no
+cryptographic material.
+
+The path validation requirement (see [[Path Validation]]) ensures
+that traffic is not forwarded on an SA whose data path has not been
+confirmed.  Bypassing path validation risks traffic blackholing when
+paths are blocked by NAT or firewall policy.
+
+The abandoned-SA recovery procedure in [[Responder-Initiated SA
+Blocked by NAT]] uses a standard Delete payload over the main IKE SA.
+Implementations MUST handle a delayed CREATE_CHILD_SA response
+arriving after the recovery INFORMATIONAL has been sent, as specified
+in that section.
+
+UDP source port variation increases the set of flows observable by
+on-path devices.  ESP encryption and integrity protection prevent
+payload manipulation, but per-flow traffic analysis based on port
+patterns remains possible.  The varying source port is a performance
+mechanism; it MUST NOT be relied upon as a security mechanism.
+
+* Acknowledgments
+
+This document evolved from discussions at several IETF meetings and
+from review of [[I-D.xu-ipsecme-esp-in-udp-lb]]. The authors thank
+the IPSECME working group participants for their input and feedback,
+with particular thanks to Valery Smyslov, Tero Kivinen, Paul Wouters,
+and Paul Bottorff.
+
+* Normative References
+
+** RFC2119
+** RFC8174
+** RFC3948
+** RFC4303
+** RFC7296
+** RFC9611
+** RFC6311
+** RFC6056
+
+* Informative References
+
+** RFC6438
+** I-D.ietf-ipsecme-encrypted-esp-ping
+** I-D.ietf-ipsecme-eesp
+** I-D.ietf-ipsecme-eesp-ikev2
+** I-D.xu-ipsecme-esp-in-udp-lb
+

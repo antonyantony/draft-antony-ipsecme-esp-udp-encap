@@ -1,0 +1,84 @@
+name: Generate Dynamic Pages
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - .gitignore
+      - mk/README.org
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - .gitignore
+      - mk/README.org
+
+jobs:
+  build:
+    name: "Update Editor's Copy"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential git emacs python3-pip pandoc
+        sudo pip install xml2rfc
+
+    - name: Pre-fetch bibxml references from bib.ietf.org
+      run: |
+        mkdir -p /tmp/.ox-rfc-ref-cache
+        for rfc in 2119 8174 3948 4303 7296 9611 6311 6056 6438; do
+          curl -sSf "https://bib.ietf.org/public/rfc/bibxml/reference.RFC.${rfc}.xml" \
+            -o /tmp/.ox-rfc-ref-cache/reference.RFC.${rfc}.xml
+        done
+        for id in ietf-ipsecme-encrypted-esp-ping ietf-ipsecme-eesp ietf-ipsecme-eesp-ikev2 xu-ipsecme-esp-in-udp-lb; do
+          curl -sSf "https://bib.ietf.org/public/rfc/bibxml-ids/reference.I-D.${id}.xml" \
+            -o /tmp/.ox-rfc-ref-cache/reference.I-D.${id}.xml
+        done
+
+    - name: Generate Draft in html txt and xml from org
+      run: make
+
+    - name: Prepare Deployment Directory
+      run: |
+        mkdir -p deploy
+        cp draft/draft-*latest*.html draft/draft-*latest*.txt deploy/
+        cp README.org deploy/  # Optional
+
+    - name: "Convert README.org to index.html : optional step"
+      run: pandoc README.org -o deploy/index.html
+
+    - name: Replace hostname with this repo hostname
+      run: |
+        USERNAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+        sed -i "s|antonyantony.github.io/draft-antony-ipsecme-udp-encap|$USERNAME.github.io/$REPO_NAME|g" deploy/index.html
+
+    - name: "Archive Built Drafts : Optional step"
+      uses: actions/upload-artifact@v4
+      with:
+        path: |
+          deploy/draft-*latest*.html
+          deploy/draft-*latest*.txt
+          deploy/index.html
+
+    - name: "Verify Draft and Deploy Directory After make : optional step"
+      run: |
+        echo "Contents of the draft directory:"
+        ls -l draft
+        echo "Contents of the deploy directory:"
+        ls -l deploy
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: deploy
+        publish_branch: gh-pages
+        keep_files: true
+        cname: ''
+        allow_empty_commit: false

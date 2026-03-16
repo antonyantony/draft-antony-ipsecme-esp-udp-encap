@@ -1,0 +1,72 @@
+name: Generate Dynamic Pages
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - .gitignore
+      - mk/README.org
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - .gitignore
+      - mk/README.org
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: "Build Editor's Copy"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential git emacs python3-pip pandoc
+        sudo pip install xml2rfc
+
+    - name: Generate Draft in html txt and xml from org
+      run: make DOCKRUN=
+
+    - name: Prepare Deployment Directory
+      run: |
+        mkdir -p deploy
+        cp draft/draft-*latest*.html draft/draft-*latest*.txt deploy/
+        cp README.org deploy/
+
+    - name: Convert README.org to index.html
+      run: pandoc README.org -o deploy/index.html
+
+    - name: Replace hostname with this repo hostname
+      run: |
+        USERNAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f1)
+        REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+        sed -i "s|antonyantony.github.io/draft-antony-ipsecme-esp-udp-encap|$USERNAME.github.io/$REPO_NAME|g" deploy/index.html
+
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: deploy
+
+  deploy:
+    name: "Deploy to GitHub Pages"
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4

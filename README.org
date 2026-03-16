@@ -1,0 +1,24 @@
+Multiple UDP Source Ports for ESP in UDP Encapsulation
+
+This is the working area for the individual Internet-Draft, *Multiple UDP Source Ports for ESP in UDP Encapsulation*
+
+* [[https://antonyantony.github.io/draft-antony-ipsecme-esp-udp-encap/draft-antony-ipsecme-udp-encap-multiport-latest.html][Editor's Copy]]
+* [[https://datatracker.ietf.org/doc/draft-antony-ipsecme-udp-encap-multiport/][Datatracker Page]]
+* [[https://author-tools.ietf.org/api/iddiff?doc_1=draft-antony-ipsecme-udp-encap-multiport&url_2=https://antonyantony.github.io/draft-antony-ipsecme-esp-udp-encap/draft-antony-ipsecme-udp-encap-multiport-latest.txt][Diff with last submission]]
+
+* [[https://github.com/antonyantony/draft-antony-ipsecme-esp-udp-encap/blob/main/CONTRIBUTING.md][Contributing]]
+
+Contributions can be made by creating pull requests.
+The GitHub interface supports creating pull requests using the Edit (✏) button.
+
+* Command Line Usage
+
+Formatted text, HTML, and XML versions of the draft can be built using *make*.
+
+#+BEGIN_SRC sh
+$ make
+ls -l draft/*-latest*
+#+END_SRC
+
+Command line usage requires that you have the necessary software installed. A local copy of emacs, which is used by the *make*. You are free to use an editor of your choice.
+Alternatively "make DOCKER=yes"

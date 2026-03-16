@@ -1,0 +1,17 @@
+*.bak
+*.org-e
+*.pdf
+*.swn
+*.swo
+*.swp
+*.tex
+*.yang
+*~
+.DS_Store
+/draft
+/idnits
+/ox-rfc.el
+/publish/*-latest.*
+/test-*.json
+/test-*.xml
+err.out

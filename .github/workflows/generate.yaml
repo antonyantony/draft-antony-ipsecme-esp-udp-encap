@@ -12,12 +12,16 @@ on:
       - .gitignore
       - mk/README.org
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   build:
-    name: "Update Editor's Copy"
+    name: "Build Editor's Copy"
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
     - uses: actions/checkout@v4
@@ -47,9 +51,9 @@ jobs:
       run: |
         mkdir -p deploy
         cp draft/draft-*latest*.html draft/draft-*latest*.txt deploy/
-        cp README.org deploy/  # Optional
+        cp README.org deploy/
 
-    - name: "Convert README.org to index.html : optional step"
+    - name: Convert README.org to index.html
       run: pandoc README.org -o deploy/index.html
 
     - name: Replace hostname with this repo hostname
@@ -58,27 +62,23 @@ jobs:
         REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
         sed -i "s|antonyantony.github.io/draft-antony-ipsecme-udp-encap|$USERNAME.github.io/$REPO_NAME|g" deploy/index.html
 
-    - name: "Archive Built Drafts : Optional step"
-      uses: actions/upload-artifact@v4
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
       with:
-        path: |
-          deploy/draft-*latest*.html
-          deploy/draft-*latest*.txt
-          deploy/index.html
+        path: deploy
 
-    - name: "Verify Draft and Deploy Directory After make : optional step"
-      run: |
-        echo "Contents of the draft directory:"
-        ls -l draft
-        echo "Contents of the deploy directory:"
-        ls -l deploy
-
+  deploy:
+    name: "Deploy to GitHub Pages"
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
     - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v4
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: deploy
-        publish_branch: gh-pages
-        keep_files: true
-        cname: ''
-        allow_empty_commit: false
+      id: deployment
+      uses: actions/deploy-pages@v4

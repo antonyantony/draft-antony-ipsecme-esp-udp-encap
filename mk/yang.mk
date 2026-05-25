@@ -17,7 +17,12 @@ PUSH_TO_REMOTE ?= origin
 ifeq ($(CIRCLECI),)
 export DOCKRUN ?= docker run --user $(shell id -u) --network=host -v $$(pwd):/work labn/org-rfc
 endif
-EMACSCMD := $(DOCKRUN) emacs -Q --batch --debug-init --eval '(setq-default indent-tabs-mode nil)' --eval '(setq org-confirm-babel-evaluate nil)' -l ./ox-rfc.el
+EMACSCMD := $(DOCKRUN) emacs -Q --batch --debug-init \
+    --eval '(setq-default indent-tabs-mode nil)' \
+    --eval '(setq org-confirm-babel-evaluate nil)' \
+    -l ./ox-rfc.el \
+    --eval '(setq ox-rfc-ref-rfc-url-directory "https://bib.ietf.org/public/rfc/bibxml/")' \
+    --eval '(setq ox-rfc-ref-draft-url-directory "https://bib.ietf.org/public/rfc/bibxml-ids/")'
 
 BRANCH_EXISTS := $(shell git rev-parse --verify $(MAIN_BRANCH) 2>/dev/null)
 

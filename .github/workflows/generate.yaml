@@ -37,11 +37,11 @@ jobs:
         done
         for id in ietf-ipsecme-encrypted-esp-ping ietf-ipsecme-eesp ietf-ipsecme-eesp-ikev2 xu-ipsecme-esp-in-udp-lb; do
           curl -sSf "https://bib.ietf.org/public/rfc/bibxml-ids/reference.I-D.${id}.xml" \
-            -o /tmp/.ox-rfc-ref-cache/reference.I-D.${id}.xml
+            -o /tmp/.ox-rfc-ref-cache/reference.I-D.${id}.xml || true
         done
 
     - name: Generate Draft in html txt and xml from org
-      run: make
+      run: make DOCKRUN=
 
     - name: Prepare Deployment Directory
       run: |

@@ -1,0 +1,2264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>Multiple UDP Source Ports for ESP in UDP Encapsulation</title>
+<meta content="Antony Antony" name="author">
+<meta content="Steffen Klassert" name="author">
+<meta content="
+       This document specifies a mechanism to improve network path
+distribution and host receive-queue load distribution for
+IPsec traffic using ESP in UDP encapsulation  .
+Using the per-resource Child SA mechanism of  ,
+peers negotiate multiple Child SAs each bound to a distinct
+UDP source port.  The resulting variation in UDP source port
+enables receive-side scaling (RSS) and equal-cost multi-path
+(ECMP) load balancing, supporting efficient per-CPU IPsec
+processing.  This document specifies the IKEv2 negotiation,
+NAT traversal behavior, and operational requirements for
+this mechanism. 
+    " name="description">
+<meta content="xml2rfc 3.31.0" name="generator">
+<meta content="IPsec" name="keyword">
+<meta content="ESP" name="keyword">
+<meta content="IKEv2" name="keyword">
+<meta content="UDP encapsulation" name="keyword">
+<meta content="RSS" name="keyword">
+<meta content="ECMP" name="keyword">
+<meta content="per-CPU" name="keyword">
+<meta content="NAT traversal" name="keyword">
+<meta content="draft-antony-ipsecme-udp-encap-multiport-00" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.31.0
+    Python 3.14.2
+    ConfigArgParse 1.7.1
+    google-i18n-address 3.1.1
+    intervaltree 3.2.1
+    Jinja2 3.1.6
+    lxml 6.0.2
+    platformdirs 4.5.1
+    pycountry 24.6.1
+    PyYAML 6.0.3
+    requests 2.32.5
+    wcwidth 0.2.14
+-->
+<link href="draft-antony-ipsecme-udp-encap-multiport-00.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">/*
+
+  NOTE: Changes at the bottom of this file overrides some earlier settings.
+
+  Once the style has stabilized and has been adopted as an official RFC style,
+  this can be consolidated so that style settings occur only in one place, but
+  for now the contents of this file consists first of the initial CSS work as
+  provided to the RFC Formatter (xml2rfc) work, followed by itemized and
+  commented changes found necessary during the development of the v3
+  formatters.
+
+*/
+
+/* fonts */
+@import url('https://static.ietf.org/fonts/noto-sans/import.css'); /* Sans-serif */
+@import url('https://static.ietf.org/fonts/noto-serif/import.css'); /* Serif (print) */
+@import url('https://static.ietf.org/fonts/roboto-mono/import.css'); /* Monospace */
+
+:root {
+  --font-sans: 'Noto Sans', Arial, Helvetica, sans-serif;
+  --font-serif: 'Noto Serif', 'Times', 'Times New Roman', serif;
+  --font-mono: 'Roboto Mono', Courier, 'Courier New', monospace;
+}
+
+@viewport {
+  zoom: 1.0;
+}
+@-ms-viewport {
+  width: extend-to-zoom;
+  zoom: 1.0;
+}
+/* general and mobile first */
+html {
+}
+body {
+  max-width: 90%;
+  margin: 1.5em auto;
+  color: #222;
+  background-color: #fff;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  scroll-behavior: smooth;
+  overflow-wrap: break-word;
+}
+.ears {
+  display: none;
+}
+
+/* headings */
+#title, h1, h2, h3, h4, h5, h6 {
+  margin: 1em 0 0.5em;
+  font-weight: bold;
+  line-height: 1.3;
+}
+#title {
+  clear: both;
+  border-bottom: 1px solid #ddd;
+  margin: 0 0 0.5em 0;
+  padding: 1em 0 0.5em;
+}
+.author {
+  padding-bottom: 4px;
+}
+h1 {
+  font-size: 26px;
+  margin: 1em 0;
+}
+h2 {
+  font-size: 22px;
+  margin-top: -20px;  /* provide offset for in-page anchors */
+  padding-top: 33px;
+}
+h3 {
+  font-size: 18px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h4 {
+  font-size: 16px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h5, h6 {
+  font-size: 14px;
+}
+#n-copyright-notice {
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 1em;
+  margin-bottom: 1em;
+}
+/* general structure */
+p {
+  padding: 0;
+  margin: 0 0 1em 0;
+  text-align: left;
+}
+div, span {
+  position: relative;
+}
+div {
+  margin: 0;
+}
+.alignRight.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignRight.art-text pre {
+  padding: 0;
+}
+.alignRight {
+  margin: 1em 0;
+}
+.alignRight > *:first-child {
+  border: none;
+  margin: 0;
+  float: right;
+  clear: both;
+}
+.alignRight > *:nth-child(2) {
+  clear: both;
+  display: block;
+  border: none;
+}
+svg {
+  display: block;
+}
+@media print {
+  svg {
+    max-height: 850px;
+    max-width: 660px;
+  }
+}
+svg[font-family~="serif" i], svg [font-family~="serif" i] {
+  font-family: var(--font-serif);
+}
+svg[font-family~="sans-serif" i], svg [font-family~="sans-serif" i] {
+  font-family: var(--font-sans);
+}
+svg[font-family~="monospace" i], svg [font-family~="monospace" i] {
+  font-family: var(--font-mono);
+}
+.alignCenter.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignCenter.art-text pre {
+  padding: 0;
+}
+.alignCenter {
+  margin: 1em 0;
+}
+.alignCenter > *:first-child {
+  display: table;
+  border: none;
+  margin: 0 auto;
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 1em 2em;
+}
+ol ol, ul ul, ol ul, ul ol {
+  margin-left: 1em;
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+.ulCompact li {
+  margin: 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+}
+ul.empty li, .ulEmpty li {
+  margin-top: 0.5em;
+}
+ul.ulBare, li.ulBare {
+  margin-left: 0em !important;
+}
+ul.compact, .ulCompact,
+ol.compact, .olCompact {
+  line-height: 100%;
+  margin: 0 0 0 2em;
+}
+
+/* definition lists */
+dl {
+}
+dl > dt {
+  float: left;
+  margin-right: 1em;
+}
+/* 
+dl.nohang > dt {
+  float: none;
+}
+*/
+dl > dd {
+  margin-bottom: .8em;
+  min-height: 1.3em;
+}
+dl.compact > dd, .dlCompact > dd {
+  margin-bottom: 0em;
+}
+dl > dd > dl {
+  margin-top: 0.5em;
+  margin-bottom: 0em;
+}
+
+/* links */
+a {
+  text-decoration: none;
+}
+a[href] {
+  color: #22e; /* Arlen: WCAG 2019 */
+}
+a[href]:hover {
+  background-color: #f2f2f2;
+}
+figcaption a[href],
+a[href].selfRef {
+  color: #222;
+}
+/* XXX probably not this:
+a.selfRef:hover {
+  background-color: transparent;
+  cursor: default;
+} */
+
+/* Figures */
+tt, code, pre {
+  background-color: #f9f9f9;
+  font-family: var(--font-mono);
+}
+pre {
+  border: 1px solid #eee;
+  margin: 0;
+  padding: 1em;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0;
+}
+figure blockquote {
+  margin: 0.8em 0.4em 0.4em;
+}
+figcaption {
+  font-style: italic;
+  margin: 0 0 1em 0;
+}
+@media screen {
+  pre {
+    overflow-x: auto;
+    max-width: 100%;
+    max-width: calc(100% - 22px);
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 1.2em 2em;
+}
+blockquote {
+  background-color: #f9f9f9;
+  color: #111; /* Arlen: WCAG 2019 */
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  margin: 1em 0;
+}
+blockquote > *:last-child {
+  margin-bottom: 0;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+.xref {
+  overflow-wrap: normal;
+}
+
+/* tables */
+table {
+  width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  border: 1px solid #eee;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5em 0.75em;
+}
+th {
+  text-align: left;
+  background-color: #e9e9e9;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f5f5f5;
+}
+table caption {
+  font-style: italic;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+table p {
+  /* XXX to avoid bottom margin on table row signifiers. If paragraphs should
+     be allowed within tables more generally, it would be far better to select on a class. */
+  margin: 0;
+}
+
+/* pilcrow */
+a.pilcrow {
+  color: #666; /* Arlen: AHDJ 2019 */
+  text-decoration: none;
+  visibility: hidden;
+  user-select: none;
+  -ms-user-select: none;
+  -o-user-select:none;
+  -moz-user-select: none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+@media screen {
+  aside:hover > a.pilcrow,
+  p:hover > a.pilcrow,
+  blockquote:hover > a.pilcrow,
+  div:hover > a.pilcrow,
+  li:hover > a.pilcrow,
+  pre:hover > a.pilcrow {
+    visibility: visible;
+  }
+  a.pilcrow:hover {
+    background-color: transparent;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid #eee;
+}
+.bcp14 {
+  font-variant: small-caps;
+}
+
+.role {
+  font-variant: all-small-caps;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: 0.9em;
+}
+#identifiers dt {
+  width: 3em;
+  clear: left;
+}
+#identifiers dd {
+  float: left;
+  margin-bottom: 0;
+}
+/* Fix PDF info block run off issue */
+@media print {
+  #identifiers dd {
+    max-width: 100%;
+  }
+}
+#identifiers .authors .author {
+  display: inline-block;
+  margin-right: 1.5em;
+}
+#identifiers .authors .org {
+  font-style: italic;
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #666; /* Arlen: WCAG 2019 */
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+}
+.docInfo .prepared {
+  float: left;
+}
+.docInfo .prepared {
+  float: right;
+}
+
+/* table of contents */
+#toc  {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+}
+nav.toc ul {
+  margin: 0 0.5em 0 0;
+  padding: 0;
+  list-style: none;
+}
+nav.toc li {
+  line-height: 1.3em;
+  margin: 0.75em 0;
+  padding-left: 1.2em;
+  text-indent: -1.2em;
+}
+/* references */
+.references dt {
+  text-align: right;
+  font-weight: bold;
+  min-width: 7em;
+}
+.references dd {
+  margin-left: 8em;
+  overflow: auto;
+}
+
+.refInstance {
+  margin-bottom: 1.25em;
+}
+
+.refSubseries {
+  margin-bottom: 1.25em;
+}
+
+.references .ascii {
+  margin-bottom: 0.25em;
+}
+
+/* index */
+.index ul {
+  margin: 0 0 0 1em;
+  padding: 0;
+  list-style: none;
+}
+.index ul ul {
+  margin: 0;
+}
+.index li {
+  margin: 0;
+  text-indent: -2em;
+  padding-left: 2em;
+  padding-bottom: 5px;
+}
+.indexIndex {
+  margin: 0.5em 0 1em;
+}
+.index a {
+  font-weight: 700;
+}
+/* make the index two-column on all but the smallest screens */
+@media (min-width: 600px) {
+  .index ul {
+    -moz-column-count: 2;
+    -moz-column-gap: 20px;
+  }
+  .index ul ul {
+    -moz-column-count: 1;
+    -moz-column-gap: 0;
+  }
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  margin: 1em 0;
+}
+
+address.vcard .nameRole {
+  font-weight: 700;
+  margin-left: 0;
+}
+address.vcard .label {
+  font-family: var(--font-sans);
+  margin: 0.5em 0;
+}
+address.vcard .type {
+  display: none;
+}
+.alternative-contact {
+  margin: 1.5em 0 1em;
+}
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+
+/* temporary notes */
+.rfcEditorRemove::before {
+  position: absolute;
+  top: 0.2em;
+  right: 0.2em;
+  padding: 0.2em;
+  content: "The RFC Editor will remove this note";
+  color: #9e2a00; /* Arlen: WCAG 2019 */
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+}
+.rfcEditorRemove {
+  position: relative;
+  padding-top: 1.8em;
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  border-radius: 3px;
+}
+.cref {
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+/* alternative layout for smaller screens */
+@media screen and (max-width: 1023px) {
+  body {
+    padding-top: 2em;
+  }
+  #title {
+    padding: 1em 0;
+  }
+  h1 {
+    font-size: 24px;
+  }
+  h2 {
+    font-size: 20px;
+    margin-top: -18px;  /* provide offset for in-page anchors */
+    padding-top: 38px;
+  }
+  #identifiers dd {
+    max-width: 60%;
+  }
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 0;
+    margin: 0;
+    background-color: inherit;
+    border-bottom: 1px solid #ccc;
+  }
+  #toc h2 {
+    margin: -1px 0 0 0;
+    padding: 4px 0 4px 6px;
+    padding-right: 1em;
+    min-width: 190px;
+    font-size: 1.1em;
+    text-align: right;
+    background-color: #444;
+    color: white;
+    cursor: pointer;
+  }
+  #toc h2::before { /* css hamburger */
+    float: right;
+    position: relative;
+    width: 1em;
+    height: 1px;
+    left: -164px;
+    margin: 6px 0 0 0;
+    background: white none repeat scroll 0 0;
+    box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+    content: "";
+  }
+  #toc nav {
+    display: none;
+    padding: 0.5em 1em 1em;
+    overflow: auto;
+    height: calc(100vh - 48px);
+    border-left: 1px solid #ddd;
+  }
+}
+
+/* alternative layout for wide screens */
+@media screen and (min-width: 1024px) {
+  body {
+    max-width: 724px;
+    margin: 42px auto;
+    padding-left: 1.5em;
+    padding-right: 29em;
+  }
+  #toc {
+    position: fixed;
+    top: 42px;
+    right: 42px;
+    width: 25%;
+    margin: 0;
+    padding: 0 1em;
+    z-index: 1;
+  }
+  #toc h2 {
+    border-top: none;
+    border-bottom: 1px solid #ddd;
+    font-size: 1em;
+    font-weight: normal;
+    margin: 0;
+    padding: 0.25em 1em 1em 0;
+  }
+  #toc nav {
+    display: block;
+    height: calc(90vh - 84px);
+    bottom: 0;
+    padding: 0.5em 0 0;
+    overflow: auto;
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc, #n-introduction {
+    page-break-before: always;
+  }
+  #toc {
+    border-top: none;
+    padding-top: 0;
+  }
+  figure, pre {
+    page-break-inside: avoid;
+  }
+  figure {
+    overflow: scroll;
+  }
+  .breakable pre {
+    break-inside: auto;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  h2+*, h3+*, h4+*, h5+*, h6+* {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+/* This is commented out here, as the string-set: doesn't
+   pass W3C validation currently */
+/*
+.ears thead .left {
+  string-set: ears-top-left content();
+}
+
+.ears thead .center {
+  string-set: ears-top-center content();
+}
+
+.ears thead .right {
+  string-set: ears-top-right content();
+}
+
+.ears tfoot .left {
+  string-set: ears-bottom-left content();
+}
+
+.ears tfoot .center {
+  string-set: ears-bottom-center content();
+}
+
+.ears tfoot .right {
+  string-set: ears-bottom-right content();
+}
+*/
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+  /* The following is commented out here, but set appropriately by in code, as
+     the content depends on the document */
+  /*
+  @top-left {
+    content: 'Internet-Draft';
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-left {
+    content: string(ears-top-left);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-center {
+    content: string(ears-top-center);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-right {
+    content: string(ears-top-right);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @bottom-left {
+    content: string(ears-bottom-left);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-center {
+    content: string(ears-bottom-center);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-right {
+      content: '[Page ' counter(page) ']';
+      vertical-align: top;
+      border-top: solid 1px #ccc;
+  }
+  */
+
+}
+
+/* Changes introduced to fix issues found during implementation */
+/* Make sure links are clickable even if overlapped by following H* */
+a {
+  z-index: 2;
+}
+/* Separate body from document info even without intervening H1 */
+section {
+  clear: both;
+}
+
+
+/* Top align author divs, to avoid names without organization dropping level with org names */
+.author {
+  vertical-align: top;
+}
+
+/* Leave room in document info to show Internet-Draft on one line */
+#identifiers dt {
+  width: 8em;
+}
+
+/* Don't waste quite as much whitespace between label and value in doc info */
+#identifiers dd {
+  margin-left: 1em;
+}
+
+/* Give floating toc a background color (needed when it's a div inside section */
+#toc {
+  background-color: white;
+}
+
+/* Make the collapsed ToC header render white on gray also when it's a link */
+@media screen and (max-width: 1023px) {
+  #toc h2 a,
+  #toc h2 a:link,
+  #toc h2 a:focus,
+  #toc h2 a:hover,
+  #toc a.toplink,
+  #toc a.toplink:hover {
+    color: white;
+    background-color: #444;
+    text-decoration: none;
+  }
+}
+
+/* Give the bottom of the ToC some whitespace */
+@media screen and (min-width: 1024px) {
+  #toc {
+    padding: 0 0 1em 1em;
+  }
+}
+
+/* Style section numbers with more space between number and title */
+.section-number {
+  padding-right: 0.5em;
+}
+
+/* prevent monospace from becoming overly large */
+tt, code, pre {
+  font-size: 95%;
+}
+
+/* Fix the height/width aspect for ascii art*/
+.sourcecode pre,
+.art-text pre {
+  line-height: 1.12;
+}
+
+
+/* Add styling for a link in the ToC that points to the top of the document */
+a.toplink {
+  float: right;
+  margin-right: 0.5em;
+}
+
+/* Fix the dl styling to match the RFC 7992 attributes */
+dl > dt,
+dl.dlParallel > dt {
+  float: left;
+  margin-right: 1em;
+}
+dl.dlNewline > dt {
+  float: none;
+}
+
+/* Provide styling for table cell text alignment */
+table td.text-left,
+table th.text-left {
+  text-align: left;
+}
+table td.text-center,
+table th.text-center {
+  text-align: center;
+}
+table td.text-right,
+table th.text-right {
+  text-align: right;
+}
+
+/* Make the alternative author contact information look less like just another
+   author, and group it closer with the primary author contact information */
+.alternative-contact {
+  margin: 0.5em 0 0.25em 0;
+}
+address .non-ascii {
+  margin: 0 0 0 2em;
+}
+
+/* With it being possible to set tables with alignment
+  left, center, and right, { width: 100%; } does not make sense */
+table {
+  width: auto;
+}
+
+/* Avoid reference text that sits in a block with very wide left margin,
+   because of a long floating dt label.*/
+.references dd {
+  overflow: visible;
+}
+
+/* Control caption placement */
+caption {
+  caption-side: bottom;
+}
+
+/* Limit the width of the author address vcard, so names in right-to-left
+   script don't end up on the other side of the page. */
+
+address.vcard {
+  max-width: 30em;
+  margin-right: auto;
+}
+
+/* For address alignment dependent on LTR or RTL scripts */
+address div.left {
+  text-align: left;
+}
+address div.right {
+  text-align: right;
+}
+
+/* Provide table alignment support.  We can't use the alignX classes above
+   since they do unwanted things with caption and other styling. */
+table.right {
+ margin-left: auto;
+ margin-right: 0;
+}
+table.center {
+ margin-left: auto;
+ margin-right: auto;
+}
+table.left {
+ margin-left: 0;
+ margin-right: auto;
+}
+
+/* Give the table caption label the same styling as the figcaption */
+caption a[href] {
+  color: #222;
+}
+
+@media print {
+  .toplink {
+    display: none;
+  }
+
+  /* avoid overwriting the top border line with the ToC header */
+  #toc {
+    padding-top: 1px;
+  }
+
+  /* Avoid page breaks inside dl and author address entries */
+  .vcard {
+    page-break-inside: avoid;
+  }
+
+}
+/* Tweak the bcp14 keyword presentation */
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+/* Tweak the invisible space above H* in order not to overlay links in text above */
+ h2 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 31px;
+ }
+ h3 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+ h4 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+/* Float artwork pilcrow to the right */
+@media screen {
+  .artwork a.pilcrow {
+    display: block;
+    line-height: 0.7;
+    margin-top: 0.15em;
+  }
+}
+/* Make pilcrows on dd visible */
+@media screen {
+  dd:hover > a.pilcrow {
+    visibility: visible;
+  }
+}
+/* Make the placement of figcaption match that of a table's caption
+   by removing the figure's added bottom margin */
+.alignLeft.art-text,
+.alignCenter.art-text,
+.alignRight.art-text {
+   margin-bottom: 0;
+}
+.alignLeft,
+.alignCenter,
+.alignRight {
+  margin: 1em 0 0 0;
+}
+/* In print, the pilcrow won't show on hover, so prevent it from taking up space,
+   possibly even requiring a new line */
+@media print {
+  a.pilcrow {
+    display: none;
+  }
+}
+/* Styling for the external metadata */
+div#external-metadata {
+  background-color: #eee;
+  padding: 0.5em;
+  margin-bottom: 0.5em;
+  display: none;
+}
+div#internal-metadata {
+  padding: 0.5em;                       /* to match the external-metadata padding */
+}
+/* Styling for title RFC Number */
+h1#rfcnum {
+  clear: both;
+  margin: 0 0 -1em;
+  padding: 1em 0 0 0;
+}
+/* Make .olPercent look the same as <ol><li> */
+dl.olPercent > dd {
+  margin-bottom: 0.25em;
+  min-height: initial;
+}
+/* Give aside some styling to set it apart */
+aside {
+  border-left: 1px solid #ddd;
+  margin: 1em 0 1em 2em;
+  padding: 0.2em 2em;
+}
+aside > dl,
+aside > ol,
+aside > ul,
+aside > table,
+aside > p {
+  margin-bottom: 0.5em;
+}
+/* Additional page break settings */
+@media print {
+  figcaption, table caption {
+    page-break-before: avoid;
+  }
+}
+/* Font size adjustments for print */
+@media print {
+  body  { font-size: 10pt;      line-height: normal; max-width: 96%; }
+  h1    { font-size: 1.72em;    padding-top: 1.5em; } /* 1*1.2*1.2*1.2 */
+  h2    { font-size: 1.44em;    padding-top: 1.5em; } /* 1*1.2*1.2 */
+  h3    { font-size: 1.2em;     padding-top: 1.5em; } /* 1*1.2 */
+  h4    { font-size: 1em;       padding-top: 1.5em; }
+  h5, h6 { font-size: 1em;      margin: initial; padding: 0.5em 0 0.3em; }
+}
+/* Sourcecode margin in print, when there's no pilcrow */
+@media print {
+  .artwork,
+  .artwork > pre,
+  .sourcecode {
+    margin-bottom: 1em;
+  }
+}
+/* Avoid narrow tables forcing too narrow table captions, which may render badly */
+table {
+  min-width: 20em;
+}
+/* ol type a */
+ol.type-a { list-style-type: lower-alpha; }
+ol.type-A { list-style-type: upper-alpha; }
+ol.type-i { list-style-type: lower-roman; }
+ol.type-I { list-style-type: upper-roman; }
+/* Apply the print table and row borders in general, on request from the RPC,
+and increase the contrast between border and odd row background slightly */
+table {
+  border: 1px solid #ddd;
+}
+td {
+  border-top: 1px solid #ddd;
+}
+tr {
+  break-inside: avoid;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f8f8f8;
+}
+/* Use style rules to govern display of the TOC. */
+@media screen and (max-width: 1023px) {
+  #toc nav { display: none; }
+  #toc.active nav { display: block; }
+}
+/* Add support for keepWithNext */
+.keepWithNext {
+  break-after: avoid-page;
+  break-after: avoid-page;
+}
+/* Add support for keepWithPrevious */
+.keepWithPrevious {
+  break-before: avoid-page;
+}
+/* Change the approach to avoiding breaks inside artwork etc. */
+figure, pre, table, .artwork, .sourcecode  {
+  break-before: auto;
+  break-after: auto;
+}
+/* Avoid breaks between <dt> and <dd> */
+dl {
+  break-before: auto;
+  break-inside: auto;
+}
+dt {
+  break-before: auto;
+  break-after: avoid-page;
+}
+dd {
+  break-before: avoid-page;
+  break-after: auto;
+  orphans: 3;
+  widows: 3
+}
+span.break, dd.break {
+  margin-bottom: 0;
+  min-height: 0;
+  break-before: auto;
+  break-inside: auto;
+  break-after: auto;
+}
+/* Undo break-before ToC */
+@media print {
+  #toc {
+    break-before: auto;
+  }
+}
+/* Text in compact lists should not get extra bottom margin space,
+   since that would makes the list not compact */
+ul.compact p, .ulCompact p,
+ol.compact p, .olCompact p {
+ margin: 0;
+}
+/* But the list as a whole needs the extra space at the end */
+section ul.compact,
+section .ulCompact,
+section ol.compact,
+section .olCompact {
+  margin-bottom: 1em;                    /* same as p not within ul.compact etc. */
+}
+/* The tt and code background above interferes with for instance table cell
+   backgrounds.  Changed to something a bit more selective. */
+tt, code {
+  background-color: transparent;
+}
+p tt, p code, li tt, li code, dt tt, dt code {
+  background-color: #f8f8f8;
+}
+/* Tweak the pre margin -- 0px doesn't come out well */
+pre {
+   margin-top: 0.5px;
+}
+/* Tweak the compact list text */
+ul.compact, .ulCompact,
+ol.compact, .olCompact,
+dl.compact, .dlCompact {
+  line-height: normal;
+}
+/* Don't add top margin for nested lists */
+li > ul, li > ol, li > dl,
+dd > ul, dd > ol, dd > dl,
+dl > dd > dl {
+  margin-top: initial;
+}
+/* Elements that should not be rendered on the same line as a <dt> */
+/* This should match the element list in writer.text.TextWriter.render_dl() */
+dd > div.artwork:first-child,
+dd > aside:first-child,
+dd > blockquote:first-child,
+dd > figure:first-child,
+dd > ol:first-child,
+dd > div.sourcecode:first-child,
+dd > table:first-child,
+dd > ul:first-child {
+  clear: left;
+}
+/* fix for weird browser behaviour when <dd/> is empty */
+dt+dd:empty::before{
+  content: "\00a0";
+}
+/* Make paragraph spacing inside <li> smaller than in body text, to fit better within the list */
+li > p {
+  margin-bottom: 0.5em
+}
+/* Don't let p margin spill out from inside list items */
+li > p:last-of-type:only-child {
+  margin-bottom: 0;
+}
+</style>
+<link href="rfc-local.css" rel="stylesheet" type="text/css">
+<script type="application/javascript">async function addMetadata(){try{const e=document.styleSheets[0].cssRules;for(let t=0;t<e.length;t++)if(/#identifiers/.exec(e[t].selectorText)){const a=e[t].cssText.replace("#identifiers","#external-updates");document.styleSheets[0].insertRule(a,document.styleSheets[0].cssRules.length)}}catch(e){console.log(e)}const e=document.getElementById("external-metadata");if(e)try{var t,a="",o=function(e){const t=document.getElementsByTagName("meta");for(let a=0;a<t.length;a++)if(t[a].getAttribute("name")===e)return t[a].getAttribute("content");return""}("rfc.number");if(o){t="https://www.rfc-editor.org/rfc/rfc"+o+".json";try{const e=await fetch(t);a=await e.json()}catch(e){t=document.URL.indexOf("html")>=0?document.URL.replace(/html$/,"json"):document.URL+".json";const o=await fetch(t);a=await o.json()}}if(!a)return;e.style.display="block";const s="",d="https://datatracker.ietf.org/doc",n="https://datatracker.ietf.org/ipr/search",c="https://www.rfc-editor.org/info",l=a.doc_id.toLowerCase(),i=a.doc_id.slice(0,3).toLowerCase(),f=a.doc_id.slice(3).replace(/^0+/,""),u={status:"Status",obsoletes:"Obsoletes",obsoleted_by:"Obsoleted By",updates:"Updates",updated_by:"Updated By",see_also:"See Also",errata_url:"Errata"};let h="<dl style='overflow:hidden' id='external-updates'>";["status","obsoletes","obsoleted_by","updates","updated_by","see_also","errata_url"].forEach(e=>{if("status"==e){a[e]=a[e].toLowerCase();var t=a[e].split(" "),o=t.length,w="",p=1;for(let e=0;e<o;e++)p<o?w=w+r(t[e])+" ":w+=r(t[e]),p++;a[e]=w}else if("obsoletes"==e||"obsoleted_by"==e||"updates"==e||"updated_by"==e){var g,m="",b=1;g=a[e].length;for(let t=0;t<g;t++)a[e][t]&&(a[e][t]=String(a[e][t]).toLowerCase(),m=b<g?m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>, ":m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>",b++);a[e]=m}else if("see_also"==e){var y,L="",C=1;y=a[e].length;for(let t=0;t<y;t++)if(a[e][t]){a[e][t]=String(a[e][t]);var _=a[e][t].slice(0,3),v=a[e][t].slice(3).replace(/^0+/,"");L=C<y?"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>, ":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>, ":"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>",C++}a[e]=L}else if("errata_url"==e){var R="";R=a[e]?R+"<a href='"+a[e]+"'>Errata exist</a> | <a href='"+d+"/"+l+"'>Datatracker</a>| <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>":"<a href='"+d+"/"+l+"'>Datatracker</a> | <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>",a[e]=R}""!=a[e]?"Errata"==u[e]?h+=`<dt>More info:</dt><dd>${a[e]}</dd>`:h+=`<dt>${u[e]}:</dt><dd>${a[e]}</dd>`:"Errata"==u[e]&&(h+=`<dt>More info:</dt><dd>${a[e]}</dd>`)}),h+="</dl>",e.innerHTML=h}catch(e){console.log(e)}else console.log("Could not locate metadata <div> element");function r(e){return e.charAt(0).toUpperCase()+e.slice(1)}}window.removeEventListener("load",addMetadata),window.addEventListener("load",addMetadata);</script>
+</head>
+<body class="xml2rfc">
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">ESP-in-UDP Multiple Source Ports</td>
+<td class="right">May 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Antony &amp; Klassert</td>
+<td class="center">Expires 27 November 2026</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">IPSECME Working Group</dd>
+<dt class="label-updates">Updates:</dt>
+<dd class="updates">
+<a href="https://www.rfc-editor.org/rfc/rfc3948%207296" class="eref">3948 7296</a> (if approved)</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-05-26" class="published">26 May 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Standards Track</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2026-11-27">27 November 2026</time></dd>
+<dt class="label-authors">Authors:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">A. Antony</div>
+<div class="org">secunet</div>
+</div>
+<div class="author">
+      <div class="author-name">S. Klassert</div>
+<div class="org">secunet</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">Multiple UDP Source Ports for ESP in UDP Encapsulation</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">This document specifies a mechanism to improve network path
+distribution and host receive-queue load distribution for
+IPsec traffic using ESP in UDP encapsulation <span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span>.
+Using the per-resource Child SA mechanism of <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>,
+peers negotiate multiple Child SAs each bound to a distinct
+UDP source port.  The resulting variation in UDP source port
+enables receive-side scaling (RSS) and equal-cost multi-path
+(ECMP) load balancing, supporting efficient per-CPU IPsec
+processing.  This document specifies the IKEv2 negotiation,
+NAT traversal behavior, and operational requirements for
+this mechanism.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 27 November 2026.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document. Code Components extracted from this
+            document must include Revised BSD License text as described in
+            Section 4.e of the Trust Legal Provisions and are provided without
+            warranty as described in the Revised BSD License.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1" class="keepWithNext"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.1">
+                <p id="section-toc.1-1.1.2.1.1" class="keepWithNext"><a href="#section-1.1" class="auto internal xref">1.1</a>.  <a href="#name-requirements-language" class="internal xref">Requirements Language</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1.2.2">
+                <p id="section-toc.1-1.1.2.2.1" class="keepWithNext"><a href="#section-1.2" class="auto internal xref">1.2</a>.  <a href="#name-terminology" class="internal xref">Terminology</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-problem-statement" class="internal xref">Problem Statement</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-solution-overview" class="internal xref">Solution Overview</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-updates-to-rfc3948-and-rfc7" class="internal xref">Updates to RFC3948 and RFC7296</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-update-to-rfc3948" class="internal xref">Update to RFC3948</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-update-to-rfc7296" class="internal xref">Update to RFC7296</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-fallback-sa" class="internal xref">Fallback SA</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-per-resource-child-sa-negot" class="internal xref">Per-Resource Child SA Negotiation</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-capability-announcement" class="internal xref">Capability Announcement</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-creating-per-resource-child" class="internal xref">Creating Per-Resource Child SAs</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-responder-behavior" class="internal xref">Responder Behavior</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.4">
+                <p id="section-toc.1-1.6.2.4.1"><a href="#section-6.4" class="auto internal xref">6.4</a>.  <a href="#name-implementation-consideratio" class="internal xref">Implementation Considerations</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.5">
+                <p id="section-toc.1-1.6.2.5.1"><a href="#section-6.5" class="auto internal xref">6.5</a>.  <a href="#name-path-validation" class="internal xref">Path Validation</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.6">
+                <p id="section-toc.1-1.6.2.6.1"><a href="#section-6.6" class="auto internal xref">6.6</a>.  <a href="#name-nic-queue-steering" class="internal xref">NIC Queue Steering</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-nat-traversal-consideration" class="internal xref">NAT Traversal Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-initiator-behind-nat" class="internal xref">Initiator Behind NAT</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.2">
+                <p id="section-toc.1-1.7.2.2.1"><a href="#section-7.2" class="auto internal xref">7.2</a>.  <a href="#name-no-nat" class="internal xref">No NAT</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.3">
+                <p id="section-toc.1-1.7.2.3.1"><a href="#section-7.3" class="auto internal xref">7.3</a>.  <a href="#name-bidirectional-nat" class="internal xref">Bidirectional NAT</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.4">
+                <p id="section-toc.1-1.7.2.4.1"><a href="#section-7.4" class="auto internal xref">7.4</a>.  <a href="#name-responder-initiated-sa-bloc" class="internal xref">Responder-Initiated SA Blocked by NAT</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.5">
+                <p id="section-toc.1-1.7.2.5.1"><a href="#section-7.5" class="auto internal xref">7.5</a>.  <a href="#name-nat-mapping-change" class="internal xref">NAT Mapping Change</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.6">
+                <p id="section-toc.1-1.7.2.6.1"><a href="#section-7.6" class="auto internal xref">7.6</a>.  <a href="#name-nat-mapping-loss" class="internal xref">NAT Mapping Loss</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-operational-considerations" class="internal xref">Operational Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.1">
+                <p id="section-toc.1-1.8.2.1.1"><a href="#section-8.1" class="auto internal xref">8.1</a>.  <a href="#name-nat-keepalives" class="internal xref">NAT Keepalives</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2">
+                <p id="section-toc.1-1.8.2.2.1"><a href="#section-8.2" class="auto internal xref">8.2</a>.  <a href="#name-dead-peer-detection-and-liv" class="internal xref">Dead Peer Detection and Liveness</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.3">
+                <p id="section-toc.1-1.8.2.3.1"><a href="#section-8.3" class="auto internal xref">8.3</a>.  <a href="#name-child-sa-rekeying" class="internal xref">Child SA Rekeying</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.4">
+                <p id="section-toc.1-1.8.2.4.1"><a href="#section-8.4" class="auto internal xref">8.4</a>.  <a href="#name-deletion" class="internal xref">Deletion</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-eesp-considerations" class="internal xref">EESP Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#section-11" class="auto internal xref">11</a>. <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12">
+            <p id="section-toc.1-1.12.1"><a href="#section-12" class="auto internal xref">12</a>. <a href="#name-acknowledgments" class="internal xref">Acknowledgments</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13">
+            <p id="section-toc.1-1.13.1"><a href="#section-13" class="auto internal xref">13</a>. <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14">
+            <p id="section-toc.1-1.14.1"><a href="#section-14" class="auto internal xref">14</a>. <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15">
+            <p id="section-toc.1-1.15.1"><a href="#appendix-A" class="auto internal xref"></a><a href="#name-authors-addresses" class="internal xref">Authors' Addresses</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">In high-speed IPsec deployments, endpoints exchange traffic at
+multi-gigabit rates and must distribute cryptographic processing
+across multiple CPU cores.  ESP in UDP encapsulation <span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span> is
+widely deployed in cloud environments and across NAT gateways.
+However, when ESP is encapsulated in UDP using port 4500 for both
+source and destination, all traffic between a given pair of peers
+shares a single 4-tuple (src-IP, dst-IP, src-port=4500,
+dst-port=4500).  This eliminates the 4-tuple diversity required for
+effective NIC receive-side scaling (RSS) and ECMP path selection.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">This document specifies a mechanism whereby IKEv2 peers establish
+multiple Child Security Associations (SAs), each bound to a distinct
+UDP source port, using the per-resource Child SA mechanism of
+<span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>.  Each per-resource Child SA is created via a
+CREATE_CHILD_SA exchange sent from a new ephemeral UDP source port.
+The resulting UDP flows, with varying source ports, enable NIC
+hardware and network infrastructure to distribute IPsec traffic
+across RSS queues and ECMP paths.  A Fallback SA on the standard port
+pair (4500 to 4500) is always maintained per <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>. This
+mechanism is defined for ESP <span>[<a href="#RFC4303" class="cite xref">RFC4303</a>]</span> in UDP encapsulation
+<span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span>; its applicability to EESP
+<span>[<a href="#I-D.ietf-ipsecme-eesp" class="cite xref">I-D.ietf-ipsecme-eesp</a>]</span><span>[<a href="#I-D.ietf-ipsecme-eesp-ikev2" class="cite xref">I-D.ietf-ipsecme-eesp-ikev2</a>]</span> is discussed
+in <a href="#sec-eesp-considerations" class="auto internal xref">Section 9</a>.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<p id="section-1-3">Varying the UDP source port without IKEv2 coordination is
+insufficient.  Without a negotiated binding between a UDP source port
+and a specific Child SA, the responder cannot distinguish an
+intentional port change from a NAT remapping event, which would
+trigger IKE SA roaming procedures per <span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 2.23.  NAT
+keepalives (<span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span> Section 6) must be maintained per active port
+pair; without IKEv2 signaling, the IKEd has no record of which port
+pairs exist.  NIC and kernel queue-steering rules require both peers
+to agree on the port-to-resource binding; without negotiation,
+consistent steering configuration across peers is not achievable.
+This document specifies the IKEv2 exchanges and behavioral rules that
+establish deterministic port-to-SA bindings, providing the
+coordination that unilateral port variation cannot.<a href="#section-1-3" class="pilcrow">¶</a></p>
+<section id="section-1.1">
+        <h3 id="name-requirements-language">
+<a href="#section-1.1" class="section-number selfRef">1.1. </a><a href="#name-requirements-language" class="section-name selfRef">Requirements Language</a>
+        </h3>
+<p id="section-1.1-1">The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+"SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+"OPTIONAL" in this document are to be interpreted as described in BCP
+14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they appear in all
+capitals, as shown here.<a href="#section-1.1-1" class="pilcrow">¶</a></p>
+</section>
+<section id="section-1.2">
+        <h3 id="name-terminology">
+<a href="#section-1.2" class="section-number selfRef">1.2. </a><a href="#name-terminology" class="section-name selfRef">Terminology</a>
+        </h3>
+<p id="section-1.2-1">This document uses the following terms from IKEv2 <span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span>: Child
+SA, CREATE_CHILD_SA exchange, IKE_AUTH exchange, INFORMATIONAL
+exchange.<a href="#section-1.2-1" class="pilcrow">¶</a></p>
+<p id="section-1.2-2">This document uses the following terms from <span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span>:
+UDP-encapsulated ESP, Non-ESP Marker.<a href="#section-1.2-2" class="pilcrow">¶</a></p>
+<p id="section-1.2-3">This document uses the following terms defined in <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>:
+per-resource Child SA, Resource, SA_RESOURCE_INFO, TS_MAX_QUEUE.<a href="#section-1.2-3" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-1.2-4">
+          <dt id="section-1.2-4.1">Fallback SA</dt>
+          <dd style="margin-left: 1.5em" id="section-1.2-4.2">
+            <p id="section-1.2-4.2.1">The standard UDP-encapsulated ESP Child SA
+using UDP source port 4500 and destination port 4500,
+established during IKE_AUTH.  It remains active for the
+lifetime of the IKE SA.<a href="#section-1.2-4.2.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.2-4.3">Per-Resource Child SA</dt>
+          <dd style="margin-left: 1.5em" id="section-1.2-4.4">
+            <p id="section-1.2-4.4.1">A Child SA established via
+CREATE_CHILD_SA from an Ephemeral Source Port, bound to
+that port for data-plane entropy and traffic-steering
+purposes.  In this document, the resource is a CPU core
+or NIC receive queue.<a href="#section-1.2-4.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.2-4.5">Ephemeral Source Port</dt>
+          <dd style="margin-left: 1.5em" id="section-1.2-4.6">
+            <p id="section-1.2-4.6.1">A UDP source port selected by the
+IKEd for a per-resource Child SA, distinct from port 4500
+and from the source ports of all other active per-resource
+Child SAs.<a href="#section-1.2-4.6.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.2-4.7">IKEd</dt>
+          <dd style="margin-left: 1.5em" id="section-1.2-4.8">
+            <p id="section-1.2-4.8.1">The IKEv2 implementation on a host responsible for
+IKE SA and Child SA lifecycle management.<a href="#section-1.2-4.8.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-1.2-4.9">TBD1</dt>
+          <dd style="margin-left: 1.5em" id="section-1.2-4.10">
+            <p id="section-1.2-4.10.1">The IKEv2 Notify Message Status Type defined in
+this document that signals support for the UDP Ephemeral
+Source Port mechanism.  A peer including TBD1 in IKE_AUTH
+implicitly signals support for the per-resource Child SA
+mechanism of <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>.  See <a href="#sec-iana-considerations" class="auto internal xref">Section 10</a>.<a href="#section-1.2-4.10.1" class="pilcrow">¶</a></p>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</section>
+<section id="section-2">
+      <h2 id="name-problem-statement">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-problem-statement" class="section-name selfRef">Problem Statement</a>
+      </h2>
+<p id="section-2-1">ESP in UDP encapsulation <span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span> deploys ESP packets in UDP with
+source port 4500 and destination port 4500. Because all IPsec traffic
+between two peers shares this single 4-tuple, no port entropy is
+present in the outer UDP header.<a href="#section-2-1" class="pilcrow">¶</a></p>
+<p id="section-2-2">Modern NIC hardware uses the outer UDP 4-tuple for RSS queue
+assignment.  Without source port entropy, all IPsec traffic between
+two peers is directed to a single NIC RSS queue and processed by a
+single CPU core, creating a throughput bottleneck even when multiple
+cores are available.<a href="#section-2-2" class="pilcrow">¶</a></p>
+<p id="section-2-3">Native ESP carries the SPI at a fixed header offset and can
+serve as an ntuple steering key for per-resource flow
+distribution.  EESP <span>[<a href="#I-D.ietf-ipsecme-eesp" class="cite xref">I-D.ietf-ipsecme-eesp</a>]</span> can carry
+explicit resource identifiers.  However, support for ESP SPI
+and EESP resource identifier filtering in current network
+devices is limited.  UDP source and destination port ntuple
+filtering scales well and is broadly supported across current
+NIC drivers and network equipment, making ESP in UDP
+encapsulation the practical foundation for per-resource flow
+steering.<a href="#section-2-3" class="pilcrow">¶</a></p>
+<p id="section-2-4">Multi-path networks using ECMP similarly rely on flow 5-tuple entropy
+to spread traffic across links.  A single UDP flow between two peers
+concentrates all traffic on one ECMP path, underutilizing available
+bandwidth.<a href="#section-2-4" class="pilcrow">¶</a></p>
+<p id="section-2-5">The IPv6 flow label <span>[<a href="#RFC6438" class="cite xref">RFC6438</a>]</span> addresses load distribution for
+tunnel traffic in IPv6 environments.  It does not apply to ESP-in-UDP
+deployments, which are used specifically where NAT traversal is
+required.  NAT devices do not preserve the IPv6 flow label, and many
+such deployments remain on IPv4.<a href="#section-2-5" class="pilcrow">¶</a></p>
+<p id="section-2-6">Varying the UDP source port per CPU or per NIC queue resolves both
+problems.  Each per-resource Child SA has a distinct UDP source port,
+providing the entropy needed for RSS and ECMP distribution without
+modifying the inner ESP payload or changing traffic selectors.
+Each per-resource Child SA also maintains an independent ESP
+sequence number counter and replay window, eliminating
+cross-CPU synchronization of cryptographic state.<a href="#section-2-6" class="pilcrow">¶</a></p>
+</section>
+<section id="section-3">
+      <h2 id="name-solution-overview">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-solution-overview" class="section-name selfRef">Solution Overview</a>
+      </h2>
+<p id="section-3-1">Two IKEv2 peers first establish a standard IKE SA and a Fallback SA
+using UDP-encapsulated ESP on port 4500.  Both peers signal support
+for this mechanism by including TBD1 (see <a href="#sec-capability-announcement" class="auto internal xref">Section 6.1</a>)
+in the IKE_AUTH exchange.<a href="#section-3-1" class="pilcrow">¶</a></p>
+<p id="section-3-2">When per-resource Child SAs are desired, the initiator sends a
+CREATE_CHILD_SA exchange from a new ephemeral UDP source port,
+including SA_RESOURCE_INFO per <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>.  The responder treats the
+resulting Child SA as a per-resource Child SA bound to that port
+tuple.  The responder MUST send the CREATE_CHILD_SA response back to
+the same source port and IP address from which the request was
+received, using its own port 4500 as the source.  All other IKE
+communication continues on the main port pair (4500 to 4500).<a href="#section-3-2" class="pilcrow">¶</a></p>
+<p id="section-3-3">The initiator MAY request additional per-resource Child SAs via
+further CREATE_CHILD_SA exchanges.  If the responder is unwilling to
+create more per-resource Child SAs for the Traffic Selector pair, it
+returns TS_MAX_QUEUE per <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>.  The Fallback SA remains active
+throughout.<a href="#section-3-3" class="pilcrow">¶</a></p>
+<p id="section-3-4">The initiator MUST NOT send CREATE_CHILD_SA from an
+Ephemeral Source Port unless both peers have exchanged TBD1
+in the IKE_AUTH exchange.  Without this exchange, a
+CREATE_CHILD_SA from a non-4500 source port would be
+misinterpreted by the responder as a NAT mapping change per
+<span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 2.23, updating the IKE SA peer port and
+disrupting all subsequent IKE communication.<a href="#section-3-4" class="pilcrow">¶</a></p>
+</section>
+<section id="section-4">
+      <h2 id="name-updates-to-rfc3948-and-rfc7">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-updates-to-rfc3948-and-rfc7" class="section-name selfRef">Updates to RFC3948 and RFC7296</a>
+      </h2>
+<section id="section-4.1">
+        <h3 id="name-update-to-rfc3948">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-update-to-rfc3948" class="section-name selfRef">Update to RFC3948</a>
+        </h3>
+<p id="section-4.1-1"><span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span> Section 2.1 requires that the UDP Source Port and
+Destination Port of ESP-in-UDP packets "MUST be the same as that used
+by IKE traffic."<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<p id="section-4.1-2">This document updates that requirement as follows.  When two IKEv2
+peers have enabled the mechanism defined in this document by
+exchanging TBD1 in the IKE_AUTH exchange, ESP-in-UDP packets
+belonging to a per-resource Child SA MAY use
+a UDP source port different from the source port used for IKE
+traffic.  The UDP source port for such packets MUST be the Ephemeral
+Source Port bound to that per-resource Child SA as negotiated in
+<a href="#sec-per-resource-child-sa-negotiation" class="auto internal xref">Section 6</a>.<a href="#section-4.1-2" class="pilcrow">¶</a></p>
+<p id="section-4.1-3">This relaxation applies only to per-resource Child SAs negotiated per
+this document.  The Fallback SA and all other Child SAs MUST continue
+to use the same port as IKE traffic, as required by <span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span>.<a href="#section-4.1-3" class="pilcrow">¶</a></p>
+</section>
+<section id="section-4.2">
+        <h3 id="name-update-to-rfc7296">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-update-to-rfc7296" class="section-name selfRef">Update to RFC7296</a>
+        </h3>
+<p id="section-4.2-1"><span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 2.23 requires that "The peer MUST also send all
+subsequent IKEv2 traffic on UDP port 4500."<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<p id="section-4.2-2"><span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 2.11 already requires that a responder MUST
+accept IKEv2 requests regardless of the UDP source port and reply to
+the address and port from which the request was received.  The
+responder-side behavior required by this document therefore needs no
+change to existing implementations.<a href="#section-4.2-2" class="pilcrow">¶</a></p>
+<p id="section-4.2-3">This document updates the initiator-side requirement of Section 2.23.
+When the mechanism defined in this document is in use,
+CREATE_CHILD_SA exchanges used to negotiate per-resource Child SAs
+MAY be sent from an Ephemeral Source Port other than 4500.  The
+responder MUST reply to the same Ephemeral Source Port from its own
+port 4500.<a href="#section-4.2-3" class="pilcrow">¶</a></p>
+<p id="section-4.2-4">All other IKEv2 traffic, including INFORMATIONAL exchanges, the IKE
+SA, and all exchanges not related to per-resource Child SA
+negotiation, MUST continue to use port 4500 as required by
+<span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span>.<a href="#section-4.2-4" class="pilcrow">¶</a></p>
+</section>
+</section>
+<section id="section-5">
+      <h2 id="name-fallback-sa">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-fallback-sa" class="section-name selfRef">Fallback SA</a>
+      </h2>
+<p id="section-5-1">The Fallback SA is the initial Child SA established during the
+IKE_AUTH exchange using UDP source port 4500 and destination port
+4500, following <span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span> and <span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span>. It serves the role of
+the shared Child SA described in <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>: a single SA usable by
+all resources while per-resource Child SAs are being negotiated or
+when no per-resource Child SA exists for a given resource.<a href="#section-5-1" class="pilcrow">¶</a></p>
+<p id="section-5-2">The Fallback SA MUST remain active for the lifetime of the IKE SA. It
+MUST NOT be deleted while per-resource Child SAs are active.  IKE
+control messages, rekeying exchanges, and deletion messages for
+per-resource Child SAs MUST be sent using the Fallback SA's port pair
+(4500 to 4500).<a href="#section-5-2" class="pilcrow">¶</a></p>
+</section>
+<div id="sec-per-resource-child-sa-negotiation">
+<section id="section-6">
+      <h2 id="name-per-resource-child-sa-negot">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-per-resource-child-sa-negot" class="section-name selfRef">Per-Resource Child SA Negotiation</a>
+      </h2>
+<div id="sec-capability-announcement">
+<section id="section-6.1">
+        <h3 id="name-capability-announcement">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-capability-announcement" class="section-name selfRef">Capability Announcement</a>
+        </h3>
+<p id="section-6.1-1">Support for the UDP Ephemeral Source Port mechanism defined
+in this document is signaled by including the TBD1
+notification in the IKE_AUTH exchange.  Both peers MUST
+include TBD1 to enable the mechanism.  If either peer omits
+TBD1 from IKE_AUTH, the initiator MUST NOT send
+CREATE_CHILD_SA from an Ephemeral Source Port; both peers
+MUST use the Fallback SA for all traffic.<a href="#section-6.1-1" class="pilcrow">¶</a></p>
+<p id="section-6.1-2">TBD1 has no notification data.<a href="#section-6.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-creating-per-resource-child-sas">
+<section id="section-6.2">
+        <h3 id="name-creating-per-resource-child">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-creating-per-resource-child" class="section-name selfRef">Creating Per-Resource Child SAs</a>
+        </h3>
+<p id="section-6.2-1">To create a per-resource Child SA, the initiator IKEd opens a new UDP
+socket bound to an Ephemeral Source Port and sends a CREATE_CHILD_SA
+exchange from that port to the responder's port 4500.  The
+CREATE_CHILD_SA exchange MUST include an SA_RESOURCE_INFO
+notification per <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>.<a href="#section-6.2-1" class="pilcrow">¶</a></p>
+<p id="section-6.2-2">The Ephemeral Source Port MUST be selected from the dynamic port
+range (49152-65535) per <span>[<a href="#RFC6056" class="cite xref">RFC6056</a>]</span> and MUST NOT be a well-known port
+(0-1023).  The port MUST be distinct from port 4500 and from the
+source ports of all currently active per-resource Child SAs.  The
+port SHOULD be selected randomly within the dynamic range per
+<span>[<a href="#RFC6056" class="cite xref">RFC6056</a>]</span>.  Because the port value is exchanged in the IKE
+handshake and bound to an SA known to both peers, randomization does
+not provide confidentiality; it prevents predictable allocation
+patterns that expose implementation state.<a href="#section-6.2-2" class="pilcrow">¶</a></p>
+<p id="section-6.2-3">The IKEd MUST retain the socket binding to the Ephemeral Source Port
+for the lifetime of the SA, preventing the operating system from
+assigning that port to other applications.<a href="#section-6.2-3" class="pilcrow">¶</a></p>
+<p id="section-6.2-4">The initiator SHOULD create one per-resource Child SA per CPU core or
+NIC receive queue available for IPsec processing, up to the limit
+indicated by TS_MAX_QUEUE (<span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>).  Creating additional
+per-resource Child SAs beyond available resources provides no benefit
+and increases IKE state on both peers.<a href="#section-6.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<section id="section-6.3">
+        <h3 id="name-responder-behavior">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-responder-behavior" class="section-name selfRef">Responder Behavior</a>
+        </h3>
+<p id="section-6.3-1">Upon receiving a CREATE_CHILD_SA containing SA_RESOURCE_INFO from a
+new UDP source port, and having exchanged TBD1 in IKE_AUTH,
+the responder MUST:<a href="#section-6.3-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-6.3-2">
+<li id="section-6.3-2.1">
+            <p id="section-6.3-2.1.1">Respond to the initiator's Ephemeral Source Port from
+its own port 4500.<a href="#section-6.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li id="section-6.3-2.2">
+            <p id="section-6.3-2.2.1">Install the Child SA with the IP and port tuple
+(initiator-IP, responder-IP, Ephemeral-Source-Port,<a href="#section-6.3-2.2.1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="normal type-1" id="section-6.3-2.2.2">
+<li id="section-6.3-2.2.2.1">
+                <p id="section-6.3-2.2.2.1.1">as the UDP binding.<a href="#section-6.3-2.2.2.1.1" class="pilcrow">¶</a></p>
+</li>
+            </ol>
+</li>
+          <li id="section-6.3-2.3">
+            <p id="section-6.3-2.3.1">NOT update the IKE SA's IP address or port based on
+this message.  Per-resource Child SA creation from a new
+source port MUST NOT be interpreted as IKE SA roaming or
+NAT mapping change.<a href="#section-6.3-2.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ol>
+</section>
+<section id="section-6.4">
+        <h3 id="name-implementation-consideratio">
+<a href="#section-6.4" class="section-number selfRef">6.4. </a><a href="#name-implementation-consideratio" class="section-name selfRef">Implementation Considerations</a>
+        </h3>
+<p id="section-6.4-1">The IKEd MUST open a socket bound to the Ephemeral Source
+Port only when initiating a CREATE_CHILD_SA exchange from
+that port.  The socket MUST NOT be opened speculatively or
+in advance of the exchange.<a href="#section-6.4-1" class="pilcrow">¶</a></p>
+<p id="section-6.4-2">During the CREATE_CHILD_SA exchange, the IKEd MUST only
+accept IKEv2 messages received on the Ephemeral Source Port
+socket that carry the IKE SA cookies (initiator and
+responder SPIs) of the IKE SA under which the Child SA is
+being negotiated.  Messages with unknown or mismatched IKE
+SA cookies MUST be silently discarded.  This prevents an
+attacker from injecting IKEv2 messages via the ephemeral
+port.<a href="#section-6.4-2" class="pilcrow">¶</a></p>
+<p id="section-6.4-3">After the CREATE_CHILD_SA exchange completes, the IKEd MUST
+retain the socket binding to prevent the operating system
+from assigning the port to another application, but MUST
+NOT process further IKEv2 messages received on the ephemeral
+port.  All subsequent IKE traffic for the Child SA uses the
+Fallback SA's port pair (4500 to 4500).<a href="#section-6.4-3" class="pilcrow">¶</a></p>
+</section>
+<div id="sec-path-validation">
+<section id="section-6.5">
+        <h3 id="name-path-validation">
+<a href="#section-6.5" class="section-number selfRef">6.5. </a><a href="#name-path-validation" class="section-name selfRef">Path Validation</a>
+        </h3>
+<p id="section-6.5-1">Completion of the CREATE_CHILD_SA exchange does not establish that
+the data path for a per-resource Child SA is viable. A NAT gateway
+may silently drop ESP traffic on the new port pair even when the IKE
+exchange succeeded.  Forwarding traffic on an unconfirmed path will
+result in blackholing.<a href="#section-6.5-1" class="pilcrow">¶</a></p>
+<p id="section-6.5-2">The responder MUST install only the inbound SA upon completing the
+CREATE_CHILD_SA exchange.  Installation of the outbound SA MUST be
+deferred until data-plane reachability is confirmed.<a href="#section-6.5-2" class="pilcrow">¶</a></p>
+<p id="section-6.5-3">Data-plane reachability is confirmed when the responder receives the
+first ESP packet on the new inbound SA.  The SAD MAY enforce a soft
+limit of one incoming packet on the inbound SA; when this limit
+triggers, the kernel signals the IKEd (e.g., via an XFRM acquire
+event), which then installs the outbound SA.<a href="#section-6.5-3" class="pilcrow">¶</a></p>
+<p id="section-6.5-4">Alternatively, the initiator MAY send an encrypted ESP ping
+(<span>[<a href="#I-D.ietf-ipsecme-encrypted-esp-ping" class="cite xref">I-D.ietf-ipsecme-encrypted-esp-ping</a>]</span>) immediately after the
+CREATE_CHILD_SA exchange completes, providing explicit confirmation
+of data-plane reachability to the responder.<a href="#section-6.5-4" class="pilcrow">¶</a></p>
+<p id="section-6.5-5">Until the outbound SA is installed, the responder MUST use the
+Fallback SA for traffic destined to the initiator.<a href="#section-6.5-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<section id="section-6.6">
+        <h3 id="name-nic-queue-steering">
+<a href="#section-6.6" class="section-number selfRef">6.6. </a><a href="#name-nic-queue-steering" class="section-name selfRef">NIC Queue Steering</a>
+        </h3>
+<p id="section-6.6-1">When a per-resource Child SA is established, each peer programs its
+NIC or kernel packet classifier to steer incoming ESP traffic for
+that UDP port pair to the target CPU or queue.<a href="#section-6.6-1" class="pilcrow">¶</a></p>
+<p id="section-6.6-2">Because the same Ephemeral Source Port appears in different header
+fields on each side, the steering rules are asymmetric:<a href="#section-6.6-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-6.6-3.1">
+            <p id="section-6.6-3.1.1">On the initiator: incoming ESP traffic from the responder
+arrives with dst-port = Ephemeral-Source-Port.
+Steer on dst-port = Ephemeral-Source-Port.<a href="#section-6.6-3.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-6.6-3.2">
+            <p id="section-6.6-3.2.1">On the responder: incoming ESP traffic from the initiator
+arrives with src-port = Ephemeral-Source-Port.
+Steer on src-port = Ephemeral-Source-Port.<a href="#section-6.6-3.2.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<p id="section-6.6-4">Example using ethtool ntuple rules, where the Ephemeral Source Port
+is 50001 and queue index is 20:<a href="#section-6.6-4" class="pilcrow">¶</a></p>
+<span id="name-nic-steering-rules-ephemera"></span><figure id="figure-1">
+          <div class="sourcecode" id="section-6.6-5.1">
+<pre>
+On initiator:
+  ethtool --config-ntuple eth0 flow-type udp4 \
+    src-port 4500 dst-port 50001 action 20
+
+On responder:
+  ethtool --config-ntuple eth0 flow-type udp4 \
+    src-port 50001 dst-port 4500 action 20
+</pre>
+</div>
+<figcaption><a href="#figure-1" class="selfRef">Figure 1</a>:
+<a href="#name-nic-steering-rules-ephemera" class="selfRef">NIC Steering Rules (Ephemeral Source Port 50001)</a>
+          </figcaption></figure>
+</section>
+</section>
+</div>
+<section id="section-7">
+      <h2 id="name-nat-traversal-consideration">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-nat-traversal-consideration" class="section-name selfRef">NAT Traversal Considerations</a>
+      </h2>
+<p id="section-7-1">The design requires that only the initiator selects the
+Ephemeral Source Port for a per-resource Child SA.  If both
+peers were to independently choose their own ephemeral ports,
+the responder would install the Child SA bound to the
+initiator's private address before any traffic has flowed.
+When a NAT is present, the responder does not yet know the
+NAT-translated address and port for the new flow: no mapping
+exists until the initiator sends the first packet.  The
+responder may also have no route to the initiator's private
+address and cannot send traffic until the NAT mapping is
+established.  By requiring the initiator to select the port
+and send first, the NAT mapping is created before the
+responder installs the outbound SA, avoiding this failure
+mode.<a href="#section-7-1" class="pilcrow">¶</a></p>
+<section id="section-7.1">
+        <h3 id="name-initiator-behind-nat">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-initiator-behind-nat" class="section-name selfRef">Initiator Behind NAT</a>
+        </h3>
+<p id="section-7.1-1">When the initiator A is behind a NAT gateway N, and A creates a
+per-resource Child SA from Ephemeral Source Port P:<a href="#section-7.1-1" class="pilcrow">¶</a></p>
+<span id="name-initiator-behind-nat-port-m"></span><figure id="figure-2">
+          <div class="sourcecode" id="section-7.1-2.1">
+<pre>
+A:P --&gt; NAT --&gt; N:Q --&gt; B:4500   (initiator to responder)
+B:4500 --&gt; N:Q --&gt; A:P           (responder to initiator)
+</pre>
+</div>
+<figcaption><a href="#figure-2" class="selfRef">Figure 2</a>:
+<a href="#name-initiator-behind-nat-port-m" class="selfRef">Initiator-Behind-NAT Port Mapping</a>
+          </figcaption></figure>
+<p id="section-7.1-3">The NAT gateway creates a new mapping for source port P, translating
+it to external port Q.  The responder B receives CREATE_CHILD_SA from
+N:Q and responds to N:Q. The per-resource Child SA's port binding at
+the responder is (N:Q, B:4500).  No special handling is required; the
+standard procedure of <a href="#sec-creating-per-resource-child-sas" class="auto internal xref">Section 6.2</a> applies.<a href="#section-7.1-3" class="pilcrow">¶</a></p>
+</section>
+<section id="section-7.2">
+        <h3 id="name-no-nat">
+<a href="#section-7.2" class="section-number selfRef">7.2. </a><a href="#name-no-nat" class="section-name selfRef">No NAT</a>
+        </h3>
+<p id="section-7.2-1">When there is no NAT between peers, per-resource Child SA creation
+proceeds as described in <a href="#sec-creating-per-resource-child-sas" class="auto internal xref">Section 6.2</a>. IP and
+port tuples are used directly for NIC steering and SAD lookups.<a href="#section-7.2-1" class="pilcrow">¶</a></p>
+<p id="section-7.2-2">The source and destination ports are symmetric in the ESP flow, as
+illustrated for Ephemeral Source Port 50001:<a href="#section-7.2-2" class="pilcrow">¶</a></p>
+<span id="name-port-tuples-without-nat"></span><figure id="figure-3">
+          <div class="sourcecode" id="section-7.2-3.1">
+<pre>
+A:50001 --&gt; B:4500   (A to B ESP traffic)
+B:4500  --&gt; A:50001  (B to A ESP traffic)
+</pre>
+</div>
+<figcaption><a href="#figure-3" class="selfRef">Figure 3</a>:
+<a href="#name-port-tuples-without-nat" class="selfRef">Port Tuples without NAT</a>
+          </figcaption></figure>
+</section>
+<section id="section-7.3">
+        <h3 id="name-bidirectional-nat">
+<a href="#section-7.3" class="section-number selfRef">7.3. </a><a href="#name-bidirectional-nat" class="section-name selfRef">Bidirectional NAT</a>
+        </h3>
+<p id="section-7.3-1">Some NAT deployments (e.g., certain cloud environments) allow mapping
+creation from either direction.  In such environments, the responder
+MAY initiate per-resource Child SA creation using its own Ephemeral
+Source Port, with the NAT gateway creating the necessary mapping. The
+procedure is identical to the initiator case and no special handling
+is required.<a href="#section-7.3-1" class="pilcrow">¶</a></p>
+</section>
+<div id="sec-responder-initiated-sa-blocked-by-nat">
+<section id="section-7.4">
+        <h3 id="name-responder-initiated-sa-bloc">
+<a href="#section-7.4" class="section-number selfRef">7.4. </a><a href="#name-responder-initiated-sa-bloc" class="section-name selfRef">Responder-Initiated SA Blocked by NAT</a>
+        </h3>
+<p id="section-7.4-1">When the responder B initiates a per-resource Child SA from a new
+Ephemeral Source Port and the NAT gateway does not support mapping
+creation in the B-to-A direction, the CREATE_CHILD_SA request is
+silently dropped.  After retransmission attempts are exhausted per
+<span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 2.1, B MUST abandon the attempt.<a href="#section-7.4-1" class="pilcrow">¶</a></p>
+<p id="section-7.4-2">A dropped CREATE_CHILD_SA leaves the IKE Message ID sequence in an
+inconsistent state.  B MUST recover by sending an INFORMATIONAL
+exchange over the main IKE SA (UDP port 4500 to 4500), containing
+both an IKEV2_MESSAGE_ID_SYNC notification (<span>[<a href="#RFC6311" class="cite xref">RFC6311</a>]</span> Section 5.1)
+and a Delete payload (<span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 3.11) carrying the SPI that
+B proposed in the failed CREATE_CHILD_SA.<a href="#section-7.4-2" class="pilcrow">¶</a></p>
+<span id="name-informational-for-abandoned"></span><figure id="figure-4">
+          <div class="sourcecode" id="section-7.4-3.1">
+<pre>
+INF( N(IKEV2_MESSAGE_ID_SYNC),
+     D(ESP, SPI) )
+</pre>
+</div>
+<figcaption><a href="#figure-4" class="selfRef">Figure 4</a>:
+<a href="#name-informational-for-abandoned" class="selfRef">INFORMATIONAL for Abandoned Per-Resource Child SA</a>
+          </figcaption></figure>
+<p id="section-7.4-4">Multiple SPIs MAY be carried in a single Delete payload when several
+per-resource Child SA attempts are abandoned.<a href="#section-7.4-4" class="pilcrow">¶</a></p>
+<p id="section-7.4-5">On receiving this INFORMATIONAL, A processes IKEV2_MESSAGE_ID_SYNC
+per <span>[<a href="#RFC6311" class="cite xref">RFC6311</a>]</span> and processes the Delete payload per <span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span>
+Section 3.11.  If A has installed a Child SA for the indicated SPI, A
+MUST delete it.  If the SPI is unknown to A, A silently ignores it
+per <span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 3.11.<a href="#section-7.4-5" class="pilcrow">¶</a></p>
+<p id="section-7.4-6">B MUST be prepared to receive a delayed CREATE_CHILD_SA response even
+after sending this INFORMATIONAL.  If such a response arrives and B
+installs the Child SA, B MUST delete it immediately.<a href="#section-7.4-6" class="pilcrow">¶</a></p>
+<p id="section-7.4-7">B MAY retry per-resource Child SA creation from a different Ephemeral
+Source Port, as individual ports may be selectively blocked by NAT
+policy.  B SHOULD cease responder-initiated per-resource Child SA
+creation after repeated consecutive failures and rely on A to create
+additional per-resource Child SAs.<a href="#section-7.4-7" class="pilcrow">¶</a></p>
+</section>
+</div>
+<section id="section-7.5">
+        <h3 id="name-nat-mapping-change">
+<a href="#section-7.5" class="section-number selfRef">7.5. </a><a href="#name-nat-mapping-change" class="section-name selfRef">NAT Mapping Change</a>
+        </h3>
+<p id="section-7.5-1">NAT mapping changes affecting per-resource Child SAs fall
+into two cases.<a href="#section-7.5-1" class="pilcrow">¶</a></p>
+<p id="section-7.5-2">When the peer's IP address changes (e.g., after network
+roaming), MOBIKE <span>[<a href="#RFC4555" class="cite xref">RFC4555</a>]</span> or the <span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span> Section 2.23
+address-change procedure detects the change on the Fallback
+SA's port pair (4500 to 4500).  Per-resource Child SAs have
+no independent IKE channel and rely entirely on the Fallback
+SA for detection.  Upon completing a MOBIKE
+UPDATE_SA_ADDRESSES exchange, the IKEd MUST delete all
+per-resource Child SAs associated with the affected IKE SA
+and SHOULD recreate them via CREATE_CHILD_SA exchanges from
+the new source address, following <a href="#sec-creating-per-resource-child-sas" class="auto internal xref">Section 6.2</a>.  Path validation (<a href="#sec-path-validation" class="auto internal xref">Section 6.5</a>) MUST be
+performed for each new per-resource Child SA before its
+outbound SA is installed.  Until recreation is complete, the
+Fallback SA MUST be used for all traffic.<a href="#section-7.5-2" class="pilcrow">¶</a></p>
+<p id="section-7.5-3">When only an ephemeral port mapping changes (the IP address
+remains the same but the NAT gateway remaps a specific
+ephemeral port), the Fallback SA is unaffected and MOBIKE
+does not fire.  Detection relies on NAT keepalive failure
+for that port pair (<a href="#sec-nat-keepalives" class="auto internal xref">Section 8.1</a>), DPD
+(<a href="#sec-dead-peer-detection-and-liveness" class="auto internal xref">Section 8.2</a>), or path validation
+(<a href="#sec-path-validation" class="auto internal xref">Section 6.5</a>) timeout on the affected per-resource
+Child SA.  Upon detecting the failure, the IKEd SHOULD
+delete the affected per-resource Child SA and recreate it
+via a new CREATE_CHILD_SA exchange.<a href="#section-7.5-3" class="pilcrow">¶</a></p>
+</section>
+<section id="section-7.6">
+        <h3 id="name-nat-mapping-loss">
+<a href="#section-7.6" class="section-number selfRef">7.6. </a><a href="#name-nat-mapping-loss" class="section-name selfRef">NAT Mapping Loss</a>
+        </h3>
+<p id="section-7.6-1">A NAT gateway reboot or mapping table reset silently
+invalidates all per-resource Child SA port mappings.  The
+Fallback SA is more resilient: IKE keepalives on the 4500
+to 4500 port pair will naturally re-establish the NAT
+mapping on the first exchange after the reboot.
+Per-resource Child SAs on ephemeral ports have no
+independent keepalive that recreates their NAT mapping.
+Once a mapping is lost, inbound ESP traffic for those SAs
+is silently dropped.<a href="#section-7.6-1" class="pilcrow">¶</a></p>
+<p id="section-7.6-2">The IKEd SHOULD detect the failure via the DPD procedure
+described in <a href="#sec-dead-peer-detection-and-liveness" class="auto internal xref">Section 8.2</a> or via
+path validation (<a href="#sec-path-validation" class="auto internal xref">Section 6.5</a>), delete the affected
+per-resource Child SAs, and create replacements via
+CREATE_CHILD_SA exchanges sent from the Fallback SA's port
+pair (4500 to 4500).  The first such exchange will
+re-establish the NAT mapping for the new Ephemeral Source
+Port.<a href="#section-7.6-2" class="pilcrow">¶</a></p>
+</section>
+</section>
+<section id="section-8">
+      <h2 id="name-operational-considerations">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-operational-considerations" class="section-name selfRef">Operational Considerations</a>
+      </h2>
+<div id="sec-nat-keepalives">
+<section id="section-8.1">
+        <h3 id="name-nat-keepalives">
+<a href="#section-8.1" class="section-number selfRef">8.1. </a><a href="#name-nat-keepalives" class="section-name selfRef">NAT Keepalives</a>
+        </h3>
+<p id="section-8.1-1">When NAT traversal keepalives are required (<span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span> Section 6), a
+one-byte NAT keepalive packet MUST be sent for every active UDP
+source and destination port pair, not only for the Fallback SA's port
+pair (4500 to 4500).<a href="#section-8.1-1" class="pilcrow">¶</a></p>
+<p id="section-8.1-2">If N per-resource Child SAs and one Fallback SA are active, N+1
+independent keepalive flows MUST be maintained, one per unique
+(src-IP, dst-IP, src-port, dst-port) tuple.<a href="#section-8.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-dead-peer-detection-and-liveness">
+<section id="section-8.2">
+        <h3 id="name-dead-peer-detection-and-liv">
+<a href="#section-8.2" class="section-number selfRef">8.2. </a><a href="#name-dead-peer-detection-and-liv" class="section-name selfRef">Dead Peer Detection and Liveness</a>
+        </h3>
+<p id="section-8.2-1">Liveness checking MAY be performed per per-resource Child SA port
+pair, or only on the Fallback SA port pair (4500 to 4500), as a local
+policy choice.<a href="#section-8.2-1" class="pilcrow">¶</a></p>
+<p id="section-8.2-2">If a liveness failure is detected on a per-resource Child SA path,
+only that SA and its associated port pair SHOULD be considered
+failed.  The IKEd SHOULD delete the failed per-resource Child SA and
+MAY create a replacement.<a href="#section-8.2-2" class="pilcrow">¶</a></p>
+<p id="section-8.2-3">If a liveness failure is detected on the Fallback SA, all
+per-resource Child SAs associated with the same IKE SA SHOULD be
+considered failed, and the IKE SA teardown procedure (<span>[<a href="#RFC7296" class="cite xref">RFC7296</a>]</span>
+Section 1.4) applies.<a href="#section-8.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<section id="section-8.3">
+        <h3 id="name-child-sa-rekeying">
+<a href="#section-8.3" class="section-number selfRef">8.3. </a><a href="#name-child-sa-rekeying" class="section-name selfRef">Child SA Rekeying</a>
+        </h3>
+<p id="section-8.3-1">Rekeying of per-resource Child SAs MUST be initiated via the main IKE
+SA, using port pair 4500 to 4500.  This ensures rekeying messages are
+not affected by per-resource Child SA path failures.<a href="#section-8.3-1" class="pilcrow">¶</a></p>
+<p id="section-8.3-2">The rekeyed Child SA MUST reuse the same Ephemeral Source Port as the
+SA being rekeyed, preserving the UDP binding and NIC queue steering
+configuration.<a href="#section-8.3-2" class="pilcrow">¶</a></p>
+</section>
+<section id="section-8.4">
+        <h3 id="name-deletion">
+<a href="#section-8.4" class="section-number selfRef">8.4. </a><a href="#name-deletion" class="section-name selfRef">Deletion</a>
+        </h3>
+<p id="section-8.4-1">Delete exchanges for per-resource Child SAs MUST be sent via the main
+IKE SA port pair (4500 to 4500), ensuring delivery even when the
+per-resource Child SA path is no longer viable.<a href="#section-8.4-1" class="pilcrow">¶</a></p>
+</section>
+</section>
+<div id="sec-eesp-considerations">
+<section id="section-9">
+      <h2 id="name-eesp-considerations">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-eesp-considerations" class="section-name selfRef">EESP Considerations</a>
+      </h2>
+<p id="section-9-1">This mechanism applies equally to EESP
+<span>[<a href="#I-D.ietf-ipsecme-eesp" class="cite xref">I-D.ietf-ipsecme-eesp</a>]</span><span>[<a href="#I-D.ietf-ipsecme-eesp-ikev2" class="cite xref">I-D.ietf-ipsecme-eesp-ikev2</a>]</span> when Sub SAs
+are not in use.  Each per-resource Child SA is a separate EESP Child
+SA with its own SPI negotiated via CREATE_CHILD_SA, and <span>[<a href="#RFC9611" class="cite xref">RFC9611</a>]</span>
+applies identically to the ESP case.<a href="#section-9-1" class="pilcrow">¶</a></p>
+<p id="section-9-2">When EESP Sub SAs are in use (an SSKDF transform is negotiated), the
+mechanism defined in this document does not apply.  Sub SAs are
+derived from a parent EESP SA and have no independent SPIs or IKEv2
+lifecycle; they do not participate in CREATE_CHILD_SA exchanges and
+cannot be bound to an Ephemeral Source Port.<a href="#section-9-2" class="pilcrow">¶</a></p>
+<p id="section-9-3">Note: if a future revision of EESP Sub SA negotiation
+includes support for resource binding and UDP source port
+assignment, the per-resource distribution function provided
+by this document could be subsumed into the base Sub SA
+mechanism, eliminating the need for separate CREATE_CHILD_SA
+exchanges per resource.<a href="#section-9-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="sec-iana-considerations">
+<section id="section-10">
+      <h2 id="name-iana-considerations">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+      </h2>
+<p id="section-10-1">This document requests IANA to assign a value for TBD1 in
+the "IKEv2 Notify Message Status Types" registry:<a href="#section-10-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-1">
+        <caption><a href="#table-1" class="selfRef">Table 1</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">Value</th>
+            <th class="text-left" rowspan="1" colspan="1">Notify Message Status Type</th>
+            <th class="text-left" rowspan="1" colspan="1">Reference</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">TBD1</td>
+            <td class="text-left" rowspan="1" colspan="1">UDP_EPHEMERAL_SOURCE_PORT</td>
+            <td class="text-left" rowspan="1" colspan="1">This document</td>
+          </tr>
+        </tbody>
+      </table>
+</section>
+</div>
+<section id="section-11">
+      <h2 id="name-security-considerations">
+<a href="#section-11" class="section-number selfRef">11. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+      </h2>
+<p id="section-11-1">Per-resource Child SAs have independent key material, inheriting the
+security properties of ESP-in-UDP <span>[<a href="#RFC3948" class="cite xref">RFC3948</a>]</span>.  The Ephemeral Source
+Port provides entropy in the outer UDP header but carries no
+cryptographic material.<a href="#section-11-1" class="pilcrow">¶</a></p>
+<p id="section-11-2">The path validation requirement (see <a href="#sec-path-validation" class="auto internal xref">Section 6.5</a>) ensures
+that traffic is not forwarded on an SA whose data path has not been
+confirmed.  Bypassing path validation risks traffic blackholing when
+paths are blocked by NAT or firewall policy.<a href="#section-11-2" class="pilcrow">¶</a></p>
+<p id="section-11-3">The abandoned-SA recovery procedure in <a href="#sec-responder-initiated-sa-blocked-by-nat" class="auto internal xref">Section 7.4</a> uses a standard Delete payload over the main IKE SA.
+Implementations MUST handle a delayed CREATE_CHILD_SA response
+arriving after the recovery INFORMATIONAL has been sent, as specified
+in that section.<a href="#section-11-3" class="pilcrow">¶</a></p>
+<p id="section-11-4">UDP source port variation increases the set of flows observable by
+on-path devices.  ESP encryption and integrity protection prevent
+payload manipulation, but per-flow traffic analysis based on port
+patterns remains possible.  The varying source port is a performance
+mechanism; it MUST NOT be relied upon as a security mechanism.<a href="#section-11-4" class="pilcrow">¶</a></p>
+</section>
+<section id="section-12">
+      <h2 id="name-acknowledgments">
+<a href="#section-12" class="section-number selfRef">12. </a><a href="#name-acknowledgments" class="section-name selfRef">Acknowledgments</a>
+      </h2>
+<p id="section-12-1">This document evolved from discussions at several IETF meetings and
+from review of <span>[<a href="#I-D.xu-ipsecme-esp-in-udp-lb" class="cite xref">I-D.xu-ipsecme-esp-in-udp-lb</a>]</span>. The authors thank
+the IPSECME working group participants for their input and feedback,
+with particular thanks to Valery Smyslov, Tero Kivinen, Paul Wouters,
+and Paul Bottorff.<a href="#section-12-1" class="pilcrow">¶</a></p>
+</section>
+<section id="section-13">
+      <h2 id="name-normative-references">
+<a href="#section-13" class="section-number selfRef">13. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+      </h2>
+<dl class="references">
+<dt id="RFC2119">[RFC2119]</dt>
+      <dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc2119">https://www.rfc-editor.org/info/rfc2119</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC3948">[RFC3948]</dt>
+      <dd>
+<span class="refAuthor">Huttunen, A.</span>, <span class="refAuthor">Swander, B.</span>, <span class="refAuthor">Volpe, V.</span>, <span class="refAuthor">DiBurro, L.</span>, and <span class="refAuthor">M. Stenberg</span>, <span class="refTitle">"UDP Encapsulation of IPsec ESP Packets"</span>, <span class="seriesInfo">RFC 3948</span>, <span class="seriesInfo">DOI 10.17487/RFC3948</span>, <time datetime="2005-01" class="refDate">January 2005</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc3948">https://www.rfc-editor.org/info/rfc3948</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC4303">[RFC4303]</dt>
+      <dd>
+<span class="refAuthor">Kent, S.</span>, <span class="refTitle">"IP Encapsulating Security Payload (ESP)"</span>, <span class="seriesInfo">RFC 4303</span>, <span class="seriesInfo">DOI 10.17487/RFC4303</span>, <time datetime="2005-12" class="refDate">December 2005</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc4303">https://www.rfc-editor.org/info/rfc4303</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6056">[RFC6056]</dt>
+      <dd>
+<span class="refAuthor">Larsen, M.</span> and <span class="refAuthor">F. Gont</span>, <span class="refTitle">"Recommendations for Transport-Protocol Port Randomization"</span>, <span class="seriesInfo">BCP 156</span>, <span class="seriesInfo">RFC 6056</span>, <span class="seriesInfo">DOI 10.17487/RFC6056</span>, <time datetime="2011-01" class="refDate">January 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc6056">https://www.rfc-editor.org/info/rfc6056</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6311">[RFC6311]</dt>
+      <dd>
+<span class="refAuthor">Singh, R., Ed.</span>, <span class="refAuthor">Kalyani, G.</span>, <span class="refAuthor">Nir, Y.</span>, <span class="refAuthor">Sheffer, Y.</span>, and <span class="refAuthor">D. Zhang</span>, <span class="refTitle">"Protocol Support for High Availability of IKEv2/IPsec"</span>, <span class="seriesInfo">RFC 6311</span>, <span class="seriesInfo">DOI 10.17487/RFC6311</span>, <time datetime="2011-07" class="refDate">July 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc6311">https://www.rfc-editor.org/info/rfc6311</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC7296">[RFC7296]</dt>
+      <dd>
+<span class="refAuthor">Kaufman, C.</span>, <span class="refAuthor">Hoffman, P.</span>, <span class="refAuthor">Nir, Y.</span>, <span class="refAuthor">Eronen, P.</span>, and <span class="refAuthor">T. Kivinen</span>, <span class="refTitle">"Internet Key Exchange Protocol Version 2 (IKEv2)"</span>, <span class="seriesInfo">STD 79</span>, <span class="seriesInfo">RFC 7296</span>, <span class="seriesInfo">DOI 10.17487/RFC7296</span>, <time datetime="2014-10" class="refDate">October 2014</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc7296">https://www.rfc-editor.org/info/rfc7296</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8174">[RFC8174]</dt>
+      <dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 8174</span>, <span class="seriesInfo">DOI 10.17487/RFC8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8174">https://www.rfc-editor.org/info/rfc8174</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9611">[RFC9611]</dt>
+    <dd>
+<span class="refAuthor">Antony, A.</span>, <span class="refAuthor">Brunner, T.</span>, <span class="refAuthor">Klassert, S.</span>, and <span class="refAuthor">P. Wouters</span>, <span class="refTitle">"Internet Key Exchange Protocol Version 2 (IKEv2) Support for Per-Resource Child Security Associations (SAs)"</span>, <span class="seriesInfo">RFC 9611</span>, <span class="seriesInfo">DOI 10.17487/RFC9611</span>, <time datetime="2024-07" class="refDate">July 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc9611">https://www.rfc-editor.org/info/rfc9611</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+<section id="section-14">
+      <h2 id="name-informative-references">
+<a href="#section-14" class="section-number selfRef">14. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+      </h2>
+<dl class="references">
+<dt id="I-D.ietf-ipsecme-eesp">[I-D.ietf-ipsecme-eesp]</dt>
+      <dd>
+<span class="refAuthor">Klassert, S.</span>, <span class="refAuthor">Antony, A.</span>, and <span class="refAuthor">C. Hopps</span>, <span class="refTitle">"Enhanced Encapsulating Security Payload (EESP)"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-ietf-ipsecme-eesp-03</span>, <time datetime="2026-03-02" class="refDate">2 March 2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/html/draft-ietf-ipsecme-eesp-03">https://datatracker.ietf.org/doc/html/draft-ietf-ipsecme-eesp-03</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="I-D.ietf-ipsecme-eesp-ikev2">[I-D.ietf-ipsecme-eesp-ikev2]</dt>
+      <dd>
+<span class="refAuthor">Klassert, S.</span>, <span class="refAuthor">Antony, A.</span>, <span class="refAuthor">Brunner, T.</span>, and <span class="refAuthor">V. Smyslov</span>, <span class="refTitle">"IKEv2 negotiation for Enhanced Encapsulating Security Payload (EESP)"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-ietf-ipsecme-eesp-ikev2-02</span>, <time datetime="2026-03-02" class="refDate">2 March 2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/html/draft-ietf-ipsecme-eesp-ikev2-02">https://datatracker.ietf.org/doc/html/draft-ietf-ipsecme-eesp-ikev2-02</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="I-D.ietf-ipsecme-encrypted-esp-ping">[I-D.ietf-ipsecme-encrypted-esp-ping]</dt>
+      <dd>
+<span class="refAuthor">Antony, A.</span> and <span class="refAuthor">S. Klassert</span>, <span class="refTitle">"Encrypted ESP Echo Protocol"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-ietf-ipsecme-encrypted-esp-ping-03</span>, <time datetime="2026-05-04" class="refDate">4 May 2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/html/draft-ietf-ipsecme-encrypted-esp-ping-03">https://datatracker.ietf.org/doc/html/draft-ietf-ipsecme-encrypted-esp-ping-03</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="I-D.xu-ipsecme-esp-in-udp-lb">[I-D.xu-ipsecme-esp-in-udp-lb]</dt>
+      <dd>
+<span class="refAuthor">Xu, X.</span>, <span class="refAuthor">Hegde, S.</span>, <span class="refAuthor">Pismenny, B.</span>, <span class="refAuthor">Zhang, D.</span>, <span class="refAuthor">Xia, L.</span>, and <span class="refAuthor">M. Puttaswamy</span>, <span class="refTitle">"Encapsulating IPsec ESP in UDP for Load-balancing"</span>, <span class="refContent">Work in Progress</span>, <span class="seriesInfo">Internet-Draft, draft-xu-ipsecme-esp-in-udp-lb-15</span>, <time datetime="2026-02-26" class="refDate">26 February 2026</time>, <span>&lt;<a href="https://datatracker.ietf.org/doc/html/draft-xu-ipsecme-esp-in-udp-lb-15">https://datatracker.ietf.org/doc/html/draft-xu-ipsecme-esp-in-udp-lb-15</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC4555">[RFC4555]</dt>
+      <dd>
+<span class="refAuthor">Eronen, P.</span>, <span class="refTitle">"IKEv2 Mobility and Multihoming Protocol (MOBIKE)"</span>, <span class="seriesInfo">RFC 4555</span>, <span class="seriesInfo">DOI 10.17487/RFC4555</span>, <time datetime="2006-06" class="refDate">June 2006</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc4555">https://www.rfc-editor.org/info/rfc4555</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6438">[RFC6438]</dt>
+    <dd>
+<span class="refAuthor">Carpenter, B.</span> and <span class="refAuthor">S. Amante</span>, <span class="refTitle">"Using the IPv6 Flow Label for Equal Cost Multipath Routing and Link Aggregation in Tunnels"</span>, <span class="seriesInfo">RFC 6438</span>, <span class="seriesInfo">DOI 10.17487/RFC6438</span>, <time datetime="2011-11" class="refDate">November 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc6438">https://www.rfc-editor.org/info/rfc6438</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+<div id="authors-addresses">
+<section id="appendix-A">
+      <h2 id="name-authors-addresses">
+<a href="#name-authors-addresses" class="section-name selfRef">Authors' Addresses</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Antony Antony</span></div>
+<div dir="auto" class="left"><span class="org">secunet Security Networks AG</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:antony.antony@secunet.com" class="email">antony.antony@secunet.com</a>
+</div>
+</address>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Steffen Klassert</span></div>
+<div dir="auto" class="left"><span class="org">secunet Security Networks AG</span></div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:steffen.klassert@secunet.com" class="email">steffen.klassert@secunet.com</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>
